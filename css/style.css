@@ -1,0 +1,163 @@
+/* 색·글꼴은 "삼국 마석 헥스맵" 과 같은 체계를 쓴다. */
+:root {
+  --bg:#f3f1ec; --panel:#fbfaf7; --ink:#24221f; --muted:#6c675f; --line:#d9d4c9;
+  --food:#f3dc94; --wood:#b2d59f; --iron:#c9d0d7; --mana:#d3bff2;
+  --food-ink:#8a6212; --wood-ink:#2f5f22; --iron-ink:#46505b; --mana-ink:#5b34a3;
+  --p1:#c8323c; --p2:#2a66d4; --p3:#16968b;
+  --token:#fffaf0; --token-ink:#2b241b; --hot:#c8323c; --halo:#fff;
+  --font-display:"Nanum Myeongjo","Noto Serif KR",serif;
+  --font-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#1b1a19; --panel:#232220; --ink:#ece8e1; --muted:#a29c92; --line:#3a3733;
+    --food:#d8c27f; --wood:#98bc85; --iron:#aeb6bf; --mana:#b9a2e3;
+    --food-ink:#55400f; --wood-ink:#22441a; --iron-ink:#323a43; --mana-ink:#43257c;
+    --p1:#e0505a; --p2:#4d86ee; --p3:#2bb3a6; --hot:#ff6b72; --halo:#15140f;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#1b1a19; --panel:#232220; --ink:#ece8e1; --muted:#a29c92; --line:#3a3733;
+  --food:#d8c27f; --wood:#98bc85; --iron:#aeb6bf; --mana:#b9a2e3;
+  --food-ink:#55400f; --wood-ink:#22441a; --iron-ink:#323a43; --mana-ink:#43257c;
+  --p1:#e0505a; --p2:#4d86ee; --p3:#2bb3a6; --hot:#ff6b72; --halo:#15140f;
+  color-scheme:dark;
+}
+
+* { box-sizing:border-box }
+body {
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--font-body); font-size:15px; line-height:1.55;
+}
+.wrap { max-width:1280px; margin:0 auto; padding-inline:20px; padding-block:22px 44px }
+
+header { display:flex; flex-wrap:wrap; gap:12px 20px; align-items:baseline; justify-content:space-between }
+header h1 {
+  font-family:var(--font-display); font-weight:800; margin:0;
+  font-size:clamp(22px,3.2vw,30px); letter-spacing:-.01em;
+}
+header .sub { color:var(--muted); font-size:13.5px }
+
+.layout { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(320px,1fr); gap:24px; margin-top:18px; align-items:start }
+@media (max-width:980px) { .layout { grid-template-columns:1fr } }
+
+/* ---- 보드 ---- */
+.boardbox { min-width:0 }
+#board { width:100%; height:auto; display:block; touch-action:manipulation }
+.hex { stroke:var(--bg); stroke-width:2.2; transition:opacity .12s }
+.hex.click { cursor:pointer }
+.own { fill:none; stroke-width:4.5 }
+.ico { pointer-events:none }
+.facet { fill:none; stroke:rgba(255,255,255,.45); stroke-width:1.1; stroke-linejoin:round }
+.tok { pointer-events:none }
+.tok circle { fill:var(--token); stroke:rgba(0,0,0,.3) }
+.tok text {
+  font-family:var(--font-mono); font-size:11px; fill:var(--token-ink);
+  text-anchor:middle; dominant-baseline:central;
+}
+.tok text.hot { fill:var(--hot); font-weight:700 }
+.glyph {
+  font-size:30px; text-anchor:middle; dominant-baseline:central;
+  paint-order:stroke; stroke:var(--halo); stroke-width:3.4px; stroke-linejoin:round;
+  pointer-events:none; font-family:"Segoe UI Symbol","Apple Symbols",serif;
+}
+.axis { font-family:var(--font-mono); font-size:11px; fill:var(--muted); text-anchor:middle; dominant-baseline:central }
+.ring { fill:none; stroke:var(--ink); stroke-width:3; pointer-events:none }
+.ring.move { stroke-dasharray:none }
+.dot { pointer-events:none }
+.sel { stroke:var(--ink); stroke-width:3.4 }
+.robber { pointer-events:none }
+.robber text { font-size:20px; text-anchor:middle; dominant-baseline:central }
+
+.banner {
+  margin-top:10px; padding:9px 13px; border-radius:10px; border:1px solid var(--line);
+  background:var(--panel); font-size:14px; min-height:42px; display:flex; align-items:center; gap:8px;
+}
+.banner.err { border-color:var(--hot); color:var(--hot) }
+.banner b { font-weight:600 }
+
+/* ---- 패널 ---- */
+aside { display:flex; flex-direction:column; gap:16px; min-width:0 }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:13px 14px }
+.card h2 {
+  font-family:var(--font-display); font-size:16px; margin:0 0 9px; font-weight:700;
+  display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+}
+.card h2 small { font-family:var(--font-body); font-weight:400; color:var(--muted); font-size:12px }
+
+.turnhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap }
+.pname { font-weight:600; display:flex; align-items:center; gap:7px }
+.pdot { width:11px; height:11px; border-radius:50%; display:inline-block; flex:none }
+.clock {
+  margin-left:auto; font-family:var(--font-mono); font-size:19px; font-variant-numeric:tabular-nums;
+  padding:1px 9px; border-radius:8px; border:1px solid var(--line);
+}
+.clock.low { color:var(--hot); border-color:var(--hot) }
+.phase { color:var(--muted); font-size:13px; margin-top:6px }
+.dice { display:flex; gap:6px; align-items:center; margin-top:9px; flex-wrap:wrap }
+.die {
+  width:34px; height:34px; border-radius:8px; border:1px solid var(--line); background:var(--bg);
+  display:grid; place-items:center; font-family:var(--font-mono); font-size:17px;
+}
+.sum { font-family:var(--font-mono); color:var(--muted) }
+
+button {
+  font:inherit; font-size:13.5px; border:1px solid var(--line); background:var(--bg); color:var(--ink);
+  padding:6px 12px; border-radius:999px; cursor:pointer;
+}
+button:hover:not(:disabled) { border-color:var(--ink) }
+button:disabled { opacity:.42; cursor:not-allowed }
+button.primary { background:var(--ink); color:var(--bg); border-color:var(--ink) }
+button[aria-pressed="true"] { background:var(--ink); color:var(--bg); border-color:var(--ink) }
+button:focus-visible { outline:2px solid var(--mana); outline-offset:2px }
+.row { display:flex; flex-wrap:wrap; gap:6px; align-items:center }
+.lab { font-size:12px; letter-spacing:.05em; color:var(--muted); margin:0 0 5px }
+
+.hand { display:grid; grid-template-columns:repeat(4,1fr); gap:7px }
+.res { border:1px solid var(--line); border-radius:9px; padding:6px 4px; text-align:center; background:var(--bg) }
+.res .n { font-family:var(--font-mono); font-size:19px; font-variant-numeric:tabular-nums }
+.res .k { font-size:11.5px; color:var(--muted) }
+.res.swF { box-shadow:inset 0 3px 0 var(--food) }
+.res.swW { box-shadow:inset 0 3px 0 var(--wood) }
+.res.swI { box-shadow:inset 0 3px 0 var(--iron) }
+.res.swM { box-shadow:inset 0 3px 0 var(--mana) }
+.hidden-hand { color:var(--muted); font-size:13px }
+
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:13px }
+th, td { padding:4px 6px; text-align:center; border-bottom:1px solid var(--line); white-space:nowrap }
+th { font-weight:500; color:var(--muted); font-size:12px }
+td:first-child, th:first-child { text-align:left }
+tr.off td { opacity:.45; text-decoration:line-through }
+
+.summon { display:grid; gap:5px }
+.sbtn {
+  display:grid; grid-template-columns:auto 1fr auto; gap:9px; align-items:center;
+  text-align:left; border-radius:9px; padding:6px 10px; width:100%;
+}
+.sbtn .cost { font-family:var(--font-mono); font-size:12px; color:var(--muted) }
+.sbtn[aria-pressed="true"] .cost { color:var(--bg) }
+.sbtn .pg { font-size:17px; font-family:"Segoe UI Symbol","Apple Symbols",serif }
+
+.log { max-height:230px; overflow-y:auto; font-size:13px; display:flex; flex-direction:column-reverse; gap:3px }
+.log .e { color:var(--ink) }
+.log .e .r { font-family:var(--font-mono); color:var(--muted); font-size:11.5px; margin-right:6px }
+
+.notice { border-color:var(--hot) }
+.pill { font-size:11.5px; padding:1px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted) }
+.pill.on { border-color:var(--hot); color:var(--hot) }
+.tradegrid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:7px }
+.tradegrid label { font-size:11.5px; color:var(--muted); display:grid; gap:3px; text-align:center }
+.tradegrid input {
+  font:inherit; font-family:var(--font-mono); width:100%; text-align:center; padding:4px;
+  border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--ink);
+}
+select {
+  font:inherit; font-size:13.5px; padding:5px 9px; border-radius:999px;
+  border:1px solid var(--line); background:var(--bg); color:var(--ink);
+}
+.notes { margin:0; padding-left:1.1em; color:var(--ink); font-size:13px }
+.notes li { margin:.2em 0 }
+.notes li::marker { color:var(--muted) }
+@media (prefers-reduced-motion:reduce) { .hex { transition:none } }

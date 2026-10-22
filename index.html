@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>카탄 증강 체스 — 3인용 육각 전략</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>카탄 증강 체스</h1>
+      <div class="sub">3인용 육각 전략 — 점령 → 생산 → 소환 → 상대 킹 사살. 한 기기에서 번갈아 두는 핫시트 방식입니다.</div>
+    </div>
+    <div class="row">
+      <button id="timer" aria-pressed="true">30초 제한</button>
+      <button id="restart">다시 시작</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="boardbox">
+      <svg id="board" role="img" aria-label="카탄 증강 체스 육각 보드"></svg>
+      <div class="banner" id="banner"></div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2 id="turn"></h2>
+        <div class="phase" id="phase"></div>
+        <div class="dice" id="dice"></div>
+        <div class="row" style="margin-top:9px">
+          <button class="primary" id="roll">주사위 굴리기</button>
+          <button id="pass">턴 넘기기</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>내 자원 <small><span id="handwho"></span> · <span id="handtotal"></span></small></h2>
+        <div class="hand" id="hand"></div>
+        <p class="lab" style="margin:8px 0 0">자원 종류는 본인만 봅니다. 다른 진영은 장수만 공개됩니다.</p>
+      </div>
+
+      <div class="card">
+        <h2>소환 <small id="surcharge"></small></h2>
+        <div class="summon" id="summon"></div>
+        <div id="extra" hidden style="margin-top:8px"></div>
+        <p class="lab" style="margin:8px 0 0">킹과 변이 맞닿은 6칸 중 빈칸에만 놓을 수 있습니다. 소환은 행위 1회를 씁니다.</p>
+      </div>
+
+      <div class="card" id="tradecard">
+        <h2>교역 <small>행위를 쓰기 전까지 자유</small></h2>
+        <p class="lab">은행 4 : 1</p>
+        <div class="row" id="bank"></div>
+        <div class="row" style="margin-top:7px">
+          <span class="pill" id="bankfrom"></span>
+          <span>→</span>
+          <select id="bankto">
+            <option value="F">식량 1</option>
+            <option value="W">목재 1</option>
+            <option value="I">철 1</option>
+            <option value="M">마석 1</option>
+          </select>
+          <button id="bankdo">교환</button>
+        </div>
+
+        <p class="lab" style="margin-top:12px">플레이어 간 교역</p>
+        <div id="tradefields">
+          <div class="lab" style="margin:0 0 3px">내가 줄 것</div>
+          <div class="tradegrid">
+            <label>식량<input id="giveF" type="number" min="0" value="0"></label>
+            <label>목재<input id="giveW" type="number" min="0" value="0"></label>
+            <label>철<input id="giveI" type="number" min="0" value="0"></label>
+            <label>마석<input id="giveM" type="number" min="0" value="0"></label>
+          </div>
+          <div class="lab" style="margin:0 0 3px">내가 받을 것</div>
+          <div class="tradegrid">
+            <label>식량<input id="getF" type="number" min="0" value="0"></label>
+            <label>목재<input id="getW" type="number" min="0" value="0"></label>
+            <label>철<input id="getI" type="number" min="0" value="0"></label>
+            <label>마석<input id="getM" type="number" min="0" value="0"></label>
+          </div>
+        </div>
+        <div class="row">
+          <select id="tradeto"></select>
+          <button id="propose">제안</button>
+        </div>
+        <div id="offer" hidden style="margin-top:9px"></div>
+      </div>
+
+      <div class="card">
+        <h2>진영</h2>
+        <table id="players"></table>
+      </div>
+
+      <div class="card">
+        <h2>기록</h2>
+        <div class="log" id="log"></div>
+      </div>
+
+      <div class="card">
+        <h2>빠른 참조</h2>
+        <ul class="notes">
+          <li>생산: 나온 숫자의 점령 칸에서 1장, 그 칸에 자기 킹·퀸이 있으면 2장. 도둑 칸은 생산 없음.</li>
+          <li>7: 8장 이상이면 절반 버리기 → 도둑 이동·약탈 → f6 생산.</li>
+          <li>점령은 마지막으로 밟은 사람의 것. 기물이 떠나도 유지. 본진은 생산 없음.</li>
+          <li>잡으면 약탈 1장. 킹을 잡으면 그 플레이어 탈락, 자원 절반을 가져갑니다.</li>
+          <li>폰이 전진 방향 판 끝에 닿으면 판에서 빠지고 원하는 자원 2장.</li>
+          <li>17라운드부터 소환 +1, 27라운드부터 소환 불가, 32라운드 종료 시 점령 수로 판정.</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="js/board.js"></script>
+<script src="js/pieces.js"></script>
+<script src="js/game.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/ui.js"></script>
+<script>
+  const game = new GameRules.Game({ useTimer: true });
+  const ui = new UI(game, document.getElementById('board'));
+  window.game = game; window.ui = ui;   // 콘솔에서 상태를 들여다볼 수 있게
+</script>
+</body>
+</html>

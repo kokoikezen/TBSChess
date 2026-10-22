@@ -1,0 +1,298 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>삼국 마석 헥스맵</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: board on the left as the hero, controls + fairness ledger on the right; stacks on phones */
+:root{
+  --bg:#f3f1ec; --panel:#fbfaf7; --ink:#24221f; --muted:#6c675f; --line:#d9d4c9;
+  --food:#f3dc94; --wood:#b2d59f; --iron:#c9d0d7; --mana:#d3bff2;
+  --food-ink:#8a6212; --wood-ink:#2f5f22; --iron-ink:#46505b; --mana-ink:#5b34a3;
+  --p1:#c8323c; --p2:#2a66d4; --p3:#16968b;
+  --token:#fffaf0; --token-ink:#2b241b; --hot:#c8323c;
+  --font-display:"Nanum Myeongjo", "Noto Serif KR", serif;
+  --font-body:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono:"IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1b1a19; --panel:#232220; --ink:#ece8e1; --muted:#a29c92; --line:#3a3733;
+  --food:#d8c27f; --wood:#98bc85; --iron:#aeb6bf; --mana:#b9a2e3;
+  --food-ink:#55400f; --wood-ink:#22441a; --iron-ink:#323a43; --mana-ink:#43257c;
+  --p1:#e0505a; --p2:#4d86ee; --p3:#2bb3a6; --token:#f5efe2; --token-ink:#2b241b; --hot:#ff6b72; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1b1a19; --panel:#232220; --ink:#ece8e1; --muted:#a29c92; --line:#3a3733;
+  --food:#d8c27f; --wood:#98bc85; --iron:#aeb6bf; --mana:#b9a2e3;
+  --food-ink:#55400f; --wood-ink:#22441a; --iron-ink:#323a43; --mana-ink:#43257c;
+  --p1:#e0505a; --p2:#4d86ee; --p3:#2bb3a6; --token:#f5efe2; --token-ink:#2b241b; --hot:#ff6b72; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 48px}
+header h1{font-family:var(--font-display);font-weight:800;font-size:clamp(26px,4vw,38px);margin:0;text-wrap:balance;letter-spacing:-.01em}
+header p{margin:.4em 0 0;color:var(--muted);max-width:62ch}
+.grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:28px;margin-top:22px;align-items:start}
+@media (max-width:880px){.grid{grid-template-columns:1fr}}
+.board{min-width:0}
+.board svg{width:100%;height:auto;display:block}
+.hex{stroke:var(--bg);stroke-width:2.2;cursor:pointer;transition:opacity .15s}
+.hex:hover,.hex.sel{stroke:var(--ink);stroke-width:2.6}
+.ico{pointer-events:none}
+.facet{fill:none;stroke:rgba(255,255,255,.45);stroke-width:1.1;stroke-linejoin:round}
+.axis{font-family:var(--font-mono);font-size:12px;fill:var(--muted);text-anchor:middle;dominant-baseline:central}
+.tok circle{fill:var(--token);stroke:rgba(0,0,0,.3)}
+.tok text{font-family:var(--font-mono);font-size:11px;fill:var(--token-ink);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.tok text.hot{fill:var(--hot);font-weight:700}
+.tok{pointer-events:none}
+.dim{opacity:.18}
+.info{margin-top:10px;min-height:2.6em;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.info b{color:var(--ink)}
+aside{display:flex;flex-direction:column;gap:22px;min-width:0}
+h2{font-family:var(--font-display);font-size:19px;margin:0 0 8px;font-weight:700}
+.legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px}
+.lg{display:flex;align-items:center;gap:10px}
+.sw{display:grid;place-items:center;width:26px;height:23px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);flex:none}
+.lg small{color:var(--muted);font-variant-numeric:tabular-nums}
+.controls{display:flex;flex-wrap:wrap;gap:8px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+button,.chip{font:inherit;font-size:13.5px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:999px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:focus-visible{outline:2px solid var(--mana);outline-offset:2px}
+.lab{font-size:12px;letter-spacing:.06em;color:var(--muted);margin:0 0 6px}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:13.5px}
+th,td{padding:6px 8px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:500;color:var(--muted);font-size:12.5px}
+td:first-child,th:first-child{text-align:left}
+.pdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.ok{display:inline-block;margin-top:8px;font-size:13px;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--wood) 18%,transparent);color:var(--ink)}
+.notes{margin:0;padding-left:1.1em;color:var(--ink);font-size:14px}
+.notes li{margin:.25em 0}
+.notes li::marker{color:var(--muted)}
+.copyrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+textarea{width:100%;box-sizing:border-box;height:90px;font-family:var(--font-mono);font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px}
+@media (prefers-reduced-motion:reduce){.hex{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>삼국 마석 헥스맵</h1>
+    <p>91칸 육각판에 식량·목재·철·마석을 배치했어요. 판을 120°씩 돌리면 세 진영(f11 · a1 · l1)의 자원 배치가 정확히 겹치도록 짜여 있어서, 누가 어느 스폰을 받아도 조건이 같습니다.</p>
+  </header>
+
+  <div class="grid">
+    <section class="board">
+      <svg id="svg" role="img" aria-label="자원이 배치된 육각 보드"></svg>
+      <div class="info" id="info">칸을 누르면 좌표, 자원, 주사위 숫자, 각 스폰까지의 거리가 표시돼요.</div>
+    </section>
+
+    <aside>
+      <div>
+        <h2>자원</h2>
+        <div class="legend" id="legend"></div>
+      </div>
+
+      <div>
+        <p class="lab">진영 강조</p>
+        <div class="seg" id="view">
+          <button data-v="all" aria-pressed="true">전체</button>
+          <button data-v="0" aria-pressed="false">P1 · f11</button>
+          <button data-v="1" aria-pressed="false">P2 · a1</button>
+          <button data-v="2" aria-pressed="false">P3 · l1</button>
+        </div>
+      </div>
+
+      <div>
+        <h2>진영별 자원 장부</h2>
+        <div class="seg" id="band" style="margin-bottom:8px">
+          <button data-b="2" aria-pressed="false">2칸 이내</button>
+          <button data-b="4" aria-pressed="false">4칸 이내</button>
+          <button data-b="zone" aria-pressed="true">자기 영역</button>
+          <button data-b="99" aria-pressed="false">전체 판 거리합</button>
+        </div>
+        <div class="tblwrap"><table id="tbl"></table></div>
+        <span class="ok" id="ok"></span>
+      </div>
+
+      <div>
+        <h2>배치 원칙</h2>
+        <ul class="notes">
+          <li>스폰 바로 옆 3칸은 식량·목재·철이 한 칸씩.</li>
+          <li>마석은 어느 스폰에서든 4칸 이상 떨어진 곳에만 둠.</li>
+          <li>마석 중 일부는 두 진영 경계선(a6, d6 등)에 놓아 다툼을 유도.</li>
+          <li>중앙 f6은 세 진영 모두 5칸 거리인 공용 마석 광맥으로, 가장 자주 나오는 7을 배정.</li>
+          <li>같은 자원끼리 붙은 곳은 판 전체에서 3쌍뿐.</li>
+          <li>주사위 숫자는 6·7·8끼리 인접하지 않고, 자원별 기대 생산량이 칸 수에 비례.</li>
+        </ul>
+      </div>
+
+      <div>
+        <h2>좌표 데이터</h2>
+        <div class="copyrow"><button id="copy">CSV 복사</button><span id="copied" class="lab" style="margin:0"></span></div>
+        <textarea id="csv" readonly aria-label="좌표별 자원 CSV"></textarea>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+const DATA = {"f11":["S",null],"a1":["S",null],"l1":["S",null],"g10":["F",9],"a2":["F",9],"k1":["F",9],"h9":["W",3],"a3":["W",3],"i1":["W",3],"i8":["F",8],"a4":["F",8],"h1":["F",8],"k7":["W",5],"a5":["W",5],"g1":["W",5],"a6":["M",6],"f1":["M",6],"l6":["M",6],"e10":["I",5],"b1":["I",5],"l2":["I",5],"f10":["W",4],"b2":["W",4],"k2":["W",4],"g9":["F",8],"b3":["F",8],"i2":["F",8],"h8":["I",5],"b4":["I",5],"h2":["I",5],"i7":["M",2],"b5":["M",2],"g2":["M",2],"b6":["I",4],"f2":["I",4],"k6":["I",4],"b7":["W",3],"e1":["W",3],"l5":["W",3],"d9":["W",6],"c1":["W",6],"l3":["W",6],"e9":["F",3],"c2":["F",3],"k3":["F",3],"f9":["I",11],"c3":["I",11],"i3":["I",11],"g8":["W",10],"c4":["W",10],"h3":["W",10],"h7":["F",6],"c5":["F",6],"g3":["F",6],"c6":["W",10],"f3":["W",10],"i6":["W",10],"c7":["M",6],"e2":["M",6],"k5":["M",6],"c8":["F",12],"d1":["F",12],"l4":["F",12],"d8":["I",9],"d2":["I",9],"k4":["I",9],"e8":["W",8],"d3":["W",8],"i4":["W",8],"f8":["F",9],"d4":["F",9],"h4":["F",9],"g7":["I",5],"d5":["I",5],"g4":["I",5],"d6":["M",4],"f4":["M",4],"h6":["M",4],"d7":["F",11],"e3":["F",11],"i5":["F",11],"e7":["I",10],"e4":["I",10],"h5":["I",10],"f7":["W",8],"e5":["W",8],"g5":["W",8],"e6":["F",9],"f5":["F",9],"g6":["F",9],"f6":["M",7]};
+const FILES = "abcdefghikl";
+const RES = {
+  F:{name:"식량",g:"식",c:"--food",k:"--food-ink"},
+  W:{name:"목재",g:"목",c:"--wood",k:"--wood-ink"},
+  I:{name:"철",g:"철",c:"--iron",k:"--iron-ink"},
+  M:{name:"마석",g:"마",c:"--mana",k:"--mana-ink"},
+};
+const SPAWNS = ["f11","a1","l1"];
+const PCOL = ["--p1","--p2","--p3"];
+const PIP = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
+
+const cells = {};
+FILES.split("").forEach((f,qi)=>{
+  const x = qi-5, n = 11-Math.abs(x);
+  for(let r=1;r<=n;r++){
+    const y = 2*r-12+Math.abs(x);
+    const q=x, rr=(-y-x)/2, s=-q-rr;
+    cells[f+r] = {id:f+r, f, r, x, y, cube:[q,rr,s], t:DATA[f+r][0], n:DATA[f+r][1]};
+  }
+});
+const dist=(a,b)=>Math.max(...a.map((v,i)=>Math.abs(v-b[i])));
+Object.values(cells).forEach(c=>{
+  c.d = SPAWNS.map(s=>dist(c.cube, cells[s].cube));
+  const m = Math.min(...c.d);
+  c.owners = c.d.map((v,i)=>v===m?i:-1).filter(i=>i>=0);
+});
+
+const R = 27, SQ = Math.sqrt(3)/2, PAD = 34;
+const W = 15*R + 2*R + 2*PAD, H = 20*SQ*R + 2*SQ*R + 2*PAD;
+const cx = W/2, cy = H/2;
+const px = c => cx + c.x*1.5*R, py = c => cy - c.y*SQ*R;
+const hexPts = (X,Y,r)=>[0,1,2,3,4,5].map(k=>{const a=Math.PI/3*k;return (X+r*Math.cos(a)).toFixed(1)+","+(Y+r*Math.sin(a)).toFixed(1)}).join(" ");
+
+const svg = document.getElementById("svg");
+svg.setAttribute("viewBox",`0 0 ${W.toFixed(0)} ${H.toFixed(0)}`);
+const NS="http://www.w3.org/2000/svg";
+const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);(p||svg).appendChild(e);return e};
+
+svg.innerHTML = `<defs>
+<symbol id="i-F" viewBox="0 0 24 24"><path d="M12 23V7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/><g fill="currentColor"><ellipse cx="12" cy="4.2" rx="1.6" ry="3"/><ellipse cx="9.4" cy="9" rx="1.6" ry="3" transform="rotate(-32 9.4 9)"/><ellipse cx="14.6" cy="9" rx="1.6" ry="3" transform="rotate(32 14.6 9)"/><ellipse cx="9.4" cy="13.6" rx="1.6" ry="3" transform="rotate(-32 9.4 13.6)"/><ellipse cx="14.6" cy="13.6" rx="1.6" ry="3" transform="rotate(32 14.6 13.6)"/><ellipse cx="9.4" cy="18.2" rx="1.6" ry="3" transform="rotate(-32 9.4 18.2)"/><ellipse cx="14.6" cy="18.2" rx="1.6" ry="3" transform="rotate(32 14.6 18.2)"/></g></symbol>
+<symbol id="i-W" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.5 6.2 9.2h3.3L4.8 15.4h4.1L4 21h16l-4.9-5.6h4.1l-4.7-6.2h3.3Z"/><rect x="10.6" y="20" width="2.8" height="3.5" fill="currentColor"/></symbol>
+<symbol id="i-I" viewBox="0 0 24 24"><g fill="currentColor"><path d="M6.3 13.6 8.6 7.4h6.8l2.3 6.2Z"/><path d="M1.5 21.5 3.8 15.2h6.8l2.3 6.3Z"/><path d="M11.1 21.5l2.3-6.3h6.8l2.3 6.3Z"/></g><path class="facet" d="M8.6 7.4 9.6 10h4.8l1-2.6M3.8 15.2l1 2.6h4.8l1-2.6M13.4 15.2l1 2.6h4.8l1-2.6"/></symbol>
+<symbol id="i-M" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.5 19.5 8.5 12 22.5 4.5 8.5Z"/><path class="facet" d="M4.5 8.5h15M12 1.5 9 8.5l3 14 3-14Z"/></symbol>
+<symbol id="i-S" viewBox="0 0 24 24"><path fill="currentColor" d="M3 22.5V9.5h3.4v3h2.8v-3h5.6v3h2.8v-3H21v13h-6.3v-5.2a2.7 2.7 0 0 0-5.4 0v5.2Z"/><path d="M12 9.5V1.5" stroke="currentColor" stroke-width="1.5"/><path fill="currentColor" d="M12.6 1.8h5.6l-1.6 1.9 1.6 1.9h-5.6Z"/></symbol>
+<symbol id="i-C" viewBox="0 0 24 24"><g fill="currentColor"><path d="M12 .8 16.4 7 12 21.5 7.6 7Z"/><path d="M5.2 8.5 8.2 12.4 6.4 21.5 3 14.8 3.6 11Z"/><path d="M18.8 8.5 15.8 12.4 17.6 21.5 21 14.8 20.4 11Z"/></g><path class="facet" d="M7.6 7h8.8M12 .8 10.4 7 12 21.5 13.6 7Z"/></symbol>
+</defs>`;
+const nodes = {};
+Object.values(cells).forEach(c=>{
+  const g = el("g",{});
+  const X=px(c), Y=py(c);
+  const fill = c.t==="S" ? `var(${PCOL[SPAWNS.indexOf(c.id)]})` : `var(${RES[c.t].c})`;
+  const h = el("polygon",{points:hexPts(X,Y,R-0.5),class:"hex",fill,tabindex:"0","aria-label":c.id},g);
+  const key = c.id==="f6" ? "C" : c.t;
+  const big = c.n ? 0 : 1;
+  const sz = big ? (c.id==="f6"?28:24) : 17;
+  const iy = big ? Y - sz/2 : Y - R*0.62;
+  el("use",{href:"#i-"+key,x:X-sz/2,y:iy,width:sz,height:sz,class:"ico",style:"color:"+(c.t==="S"?"#fff":`var(${RES[c.t].k})`)},g);
+  const tok = el("g",{class:"tok"},g);
+  if(c.n){
+    el("circle",{cx:X,cy:Y+R*0.36,r:8.6},tok);
+    const tt = el("text",{x:X,y:Y+R*0.36+0.5,class:(c.n===6||c.n===7||c.n===8)?"hot":""},tok); tt.textContent=c.n;
+  }
+  h.addEventListener("click",()=>select(c.id));
+  h.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(c.id)}});
+  nodes[c.id]={g,h};
+});
+// axis labels: files along bottom edges, ranks along sides
+FILES.split("").forEach((f,qi)=>{
+  const c = cells[f+"1"];
+  el("text",{x:px(c),y:py(c)+R*1.45,class:"axis"}).textContent=f;
+});
+for(let r=1;r<=6;r++){
+  const a=cells["a"+r], l=cells["l"+r];
+  el("text",{x:px(a)-R*1.45,y:py(a),class:"axis"}).textContent=r;
+  el("text",{x:px(l)+R*1.45,y:py(l),class:"axis"}).textContent=r;
+}
+for(let r=7;r<=11;r++){
+  const fl = FILES[r-6], fr = FILES[16-r];
+  const a=cells[fl+r], b=cells[fr+r];
+  el("text",{x:px(a)-R*0.9,y:py(a)-R*1.1,class:"axis"}).textContent=r;
+  el("text",{x:px(b)+R*0.9,y:py(b)-R*1.1,class:"axis"}).textContent=r;
+}
+
+// state
+let view="all", band="zone", sel=null;
+function apply(){
+  Object.values(cells).forEach(c=>{
+    const n=nodes[c.id];
+    const inView = view==="all" || c.owners.includes(+view);
+    n.g.classList.toggle("dim", !inView);
+    n.h.classList.toggle("sel", sel===c.id);
+  });
+}
+function select(id){
+  sel=id; const c=cells[id];
+  const what = c.t==="S" ? `P${SPAWNS.indexOf(id)+1} 스폰` : (id==="f6"?"공용 마석 광맥":RES[c.t].name);
+  const num = c.n ? ` · 숫자 <b>${c.n}</b> (${PIP[c.n]}점)` : "";
+  const own = c.owners.length>1 ? `경계 칸 (P${c.owners.map(i=>i+1).join("·P")} 공유)` : `P${c.owners[0]+1} 영역`;
+  document.getElementById("info").innerHTML = `<b>${id}</b> · ${what}${num}<br>거리 P1 ${c.d[0]} · P2 ${c.d[1]} · P3 ${c.d[2]} — ${own}`;
+  apply();
+}
+document.querySelectorAll("#view button").forEach(b=>b.onclick=()=>{
+  view=b.dataset.v; document.querySelectorAll("#view button").forEach(x=>x.setAttribute("aria-pressed",x===b)); apply();
+});
+document.querySelectorAll("#band button").forEach(b=>b.onclick=()=>{
+  band=b.dataset.b; document.querySelectorAll("#band button").forEach(x=>x.setAttribute("aria-pressed",x===b)); ledger();
+});
+
+// legend with totals
+const tot={F:0,W:0,I:0,M:0};
+Object.values(cells).forEach(c=>{if(tot[c.t]!==undefined)tot[c.t]++});
+document.getElementById("legend").innerHTML = Object.entries(RES).map(([k,v])=>
+  `<div class="lg"><span class="sw" style="background:var(${v.c})"><svg viewBox="0 0 24 24" width="14" height="14" style="color:var(${v.k})"><use href="#i-${k}"/></svg></span><span>${v.name}</span><small>${tot[k]}칸</small></div>`).join("") +
+  `<div class="lg" style="grid-column:1/-1"><small>각 진영 몫: 식량 9 · 목재 9 · 철 7 · 마석 4 + 중앙 공용 마석 1</small></div>`+
+  `<div class="lg"><span class="sw" style="background:var(--p1)"><svg viewBox="0 0 24 24" width="14" height="14" style="color:#fff"><use href="#i-S"/></svg></span><span>스폰</span></div>`+
+  `<div class="lg"><span class="sw" style="background:var(--mana)"><svg viewBox="0 0 24 24" width="15" height="15" style="color:var(--mana-ink)"><use href="#i-C"/></svg></span><span>중앙 광맥</span></div>`;
+
+// ledger
+function ledger(){
+  const rows = SPAWNS.map((s,p)=>{
+    const cnt={F:0,W:0,I:0,M:0}, pip={F:0,W:0,I:0,M:0}; 
+    Object.values(cells).forEach(c=>{
+      if(!(c.t in cnt)) return;
+      let take;
+      if(band==="zone") take = c.owners.includes(p) ? 1/c.owners.length : 0;
+      else if(band==="99") take = 0;
+      else take = c.d[p] <= +band ? 1 : 0;
+      if(band==="99"){ cnt[c.t]+=c.d[p]; return; }
+      cnt[c.t]+=take; if(c.n) pip[c.t]+=take*PIP[c.n];
+    });
+    return {p,cnt,pip};
+  });
+  const fmt=v=>Number.isInteger(v)?v:v.toFixed(1);
+  const sig = rows.map(r=>JSON.stringify([r.cnt,r.pip]));
+  const same = sig.every(x=>x===sig[0]);
+  let head = band==="99"
+    ? `<tr><th>진영</th>${Object.values(RES).map(v=>`<th>${v.name}<br>거리 합</th>`).join("")}</tr>`
+    : `<tr><th>진영</th>${Object.values(RES).map(v=>`<th>${v.name}</th>`).join("")}<th>생산 점수</th></tr>`;
+  const body = rows.map(r=>{
+    const name=`<span class="pdot" style="background:var(${PCOL[r.p]})"></span>P${r.p+1} · ${SPAWNS[r.p]}`;
+    if(band==="99") return `<tr><td>${name}</td>${Object.keys(RES).map(k=>`<td>${fmt(r.cnt[k])}</td>`).join("")}</tr>`;
+    const ps=Object.values(r.pip).reduce((a,b)=>a+b,0);
+    return `<tr><td>${name}</td>${Object.keys(RES).map(k=>`<td>${fmt(r.cnt[k])}</td>`).join("")}<td>${fmt(ps)}</td></tr>`;
+  }).join("");
+  document.getElementById("tbl").innerHTML = head+body;
+  const note = band==="zone" ? "경계 칸은 공유 진영 수로 나눠 계산" : band==="99" ? "각 자원까지의 거리 총합" : "스폰에서 지정 거리 이내";
+  document.getElementById("ok").textContent = (same?"세 진영 동일 ✓ ":"차이 있음 ✗ ") + "· " + note;
+}
+
+// csv
+const order = Object.values(cells).sort((a,b)=>a.f===b.f?a.r-b.r:FILES.indexOf(a.f)-FILES.indexOf(b.f));
+const csv = "coord,resource,dice\n"+order.map(c=>`${c.id},${c.t==="S"?"spawn":({F:"food",W:"wood",I:"iron",M:"mana"})[c.t]},${c.n??""}`).join("\n");
+const ta=document.getElementById("csv"); ta.value=csv;
+document.getElementById("copy").onclick=()=>{
+  const done=m=>document.getElementById("copied").textContent=m;
+  navigator.clipboard.writeText(csv).then(()=>done("복사됨")).catch(()=>{ta.focus();ta.select();done("선택됨 · Ctrl+C로 복사")});
+};
+
+apply(); ledger();
+</script>
+
+</body></html>

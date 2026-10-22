@@ -196,19 +196,45 @@ test('칸은 마지막으로 밟은 사람의 것이고 떠나도 유지된다',
 
 test('소환은 킹과 맞닿은 빈칸에만, 비용만큼 자원을 낸다', () => {
   const g = bare();
-  hand(g, 0, { F: 2, W: 2, I: 2, M: 2 });
+  hand(g, 0, { F: 3, W: 2, I: 4, M: 2 });
   rig(g, 2);
   g.roll();
   ok(g.summonCells(0).indexOf('f10') >= 0, 'f10은 킹 인접');
   ok(!g.summon('N', 'f9').ok, '킹에서 2칸 떨어진 칸은 거부');
   ok(g.summon('N', 'f10').ok, '나이트 소환');
-  eq(g.player(0).hand, { F: 1, W: 2, I: 0, M: 2 }, '비용 차감(식량1·철2)');
+  eq(g.player(0).hand, { F: 1, W: 2, I: 0, M: 2 }, '비용 차감(식량2·철4)');
   eq(g.owners['f10'], 0, '소환한 칸 점령');
+});
+
+test('모든 기물 가격은 규칙서 표의 2배다', () => {
+  const draft = {           // 규칙서 8장 원래 표
+    P: { F: 1, W: 1 }, N: { F: 1, I: 2 }, B: { F: 1, I: 1, M: 1 },
+    R: { W: 2, I: 1 }, Q: { F: 1, I: 2, M: 2 },
+  };
+  const swapped = { P: 'P', N: 'N', B: 'R', R: 'B', Q: 'Q' };   // 룩↔비숍은 재료를 맞바꿨다
+  P.SUMMONABLE.forEach(t => {
+    const base = draft[swapped[t]];
+    B.RESOURCES.forEach(k => {
+      eq(P.COSTS[t][k] || 0, (base[k] || 0) * 2, P.PIECE_INFO[t].name + ' ' + B.RES_INFO[k].name);
+    });
+  });
+});
+
+test('룩과 비숍은 재료가 서로 바뀌었다 — 룩이 마석을, 비숍이 목재를 쓴다', () => {
+  eq(P.COSTS.R, { F: 2, I: 2, M: 2 }, '룩');
+  eq(P.COSTS.B, { W: 4, I: 2 }, '비숍');
+  const g = bare();
+  hand(g, 0, { F: 2, I: 2, M: 2 });
+  rig(g, 2);
+  g.roll();
+  ok(!g.canAfford(0, 'B'), '목재가 없으면 비숍은 못 낸다');
+  ok(g.summon('R', 'f10').ok, '같은 자원으로 룩은 낼 수 있다');
+  eq(g.player(0).hand, { F: 0, W: 0, I: 0, M: 0 }, '룩 비용 전부 소모');
 });
 
 test('퀸은 판 위에 1개까지, 잡히면 다시 소환할 수 있다', () => {
   const g = bare();
-  hand(g, 0, { F: 2, I: 4, M: 4 });
+  hand(g, 0, { F: 2, I: 4, M: 4 });     // 퀸 = 식량2·철4·마석4
   rig(g, 2);
   g.roll();
   ok(g.summon('Q', 'f10').ok, '첫 퀸');
@@ -221,14 +247,14 @@ test('퀸은 판 위에 1개까지, 잡히면 다시 소환할 수 있다', () =
 test('체크를 막으려 소환하면 아무 자원 1장을 더 낸다', () => {
   const g = bare();
   put(g, 'f1', 1, 'R');                 // f열 직선으로 f11 킹을 노린다
-  hand(g, 0, { F: 1, W: 1, M: 3 });
+  hand(g, 0, { F: 2, W: 2, M: 3 });
   rig(g, 2);
   g.roll();
   ok(g.inCheck(0), '체크 상태');
   eq(g.surcharge(0), { extra: 1, reasons: ['긴급 소환 +1'] }, '추가 비용');
   ok(!g.summon('P', 'f10').ok, '추가 비용을 정하지 않으면 거부');
   ok(g.summon('P', 'f10', ['M']).ok, '마석으로 추가 비용');
-  eq(g.player(0).hand, { F: 0, W: 0, I: 0, M: 2 }, '폰 비용 + 추가 1장');
+  eq(g.player(0).hand, { F: 0, W: 0, I: 0, M: 2 }, '폰 비용(식2목2) + 추가 1장');
   ok(!g.inCheck(0), '사이를 막아 체크 해소');
 });
 
@@ -284,6 +310,18 @@ test('룩과 비숍은 막히면 지나갈 수 없고 나이트는 뛰어넘는�
 });
 
 // ---- 10장: 체크·탈락·승리 -------------------------------------------------
+
+test('킹은 변이 맞닿은 주변 6칸으로만 1칸 움직인다', () => {
+  const g = bare();
+  const center = new Map([['f6', { owner: 0, type: 'K' }]]);
+  eq(P.moves(center, 'f6').map(m => m.to).sort(), B.neighbors('f6').sort(), '중앙 킹');
+  eq(P.moves(center, 'f6').length, 6, '꼭짓점 방향은 쓰지 않는다');
+  ok(P.moves(center, 'f6').every(m => B.distance('f6', m.to) === 1), '모두 1칸 거리');
+  // 본진은 판 꼭짓점이라 이웃이 3칸뿐이다
+  eq(P.moves(g.pieces, 'f11').map(m => m.to).sort(), ['e10', 'f10', 'g10'], 'f11 킹');
+  eq(g.summonCells(0).sort(), P.moves(g.pieces, 'f11').map(m => m.to).sort(),
+    '킹의 이동 범위와 소환 가능 칸이 같아졌다');
+});
 
 test('체크 중에는 체크를 푸는 행위만 할 수 있다', () => {
   const g = bare();
@@ -351,14 +389,14 @@ test('마지막까지 남은 1명이 승리한다', () => {
 
 test('17라운드부터 소환 비용 +1, 27라운드부터 소환 불가', () => {
   const g = bare();
-  hand(g, 0, { F: 3, W: 3, I: 3, M: 3 });
+  hand(g, 0, { F: 4, W: 4, I: 3, M: 3 });
   g.round = 17;
   eq(g.surcharge(0), { extra: 1, reasons: ['전쟁 피로 +1'] }, '17라운드 추가 비용');
   rig(g, 2);
   g.roll();
   ok(!g.summon('P', 'f10').ok, '추가 비용을 정해야 한다');
   ok(g.summon('P', 'f10', ['I']).ok, '철로 추가 비용');
-  eq(g.player(0).hand, { F: 2, W: 2, I: 2, M: 3 }, '폰 1·1 + 추가 철 1');
+  eq(g.player(0).hand, { F: 2, W: 2, I: 2, M: 3 }, '폰 2·2 + 추가 철 1');
   g.round = 27;
   g.phase = 'action'; g.actionUsed = false; g.current = 0;
   ok(g.summonBlocked(), '소환 불가');

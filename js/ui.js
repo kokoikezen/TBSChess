@@ -108,6 +108,8 @@
         this.nodes[id] = node;
       }
       this.drawAxes();
+      // 아우라와 연결선은 모든 칸 위에 그려야 이웃 칸에 가리지 않는다.
+      this.overlay = svgEl('g', { class: 'overlay' }, this.svg);
     }
 
     px(c) { return this.cx + c.x * 1.5 * HEX_R; }
@@ -142,6 +144,7 @@
     click(id) {
       const g = this.game;
       this.message = '';
+      if (!this.myMove()) return this.render();
       if (g.phase === 'setup') return this.report(g.place(id));
       if (g.phase === 'robber') return this.report(g.moveRobber(id));
       if (g.phase !== 'action' || g.actionUsed || g.pendingPawnReturn) return this.render();
@@ -167,6 +170,16 @@
       this.render();
     }
 
+    /** 지금 판에서 뭔가를 골라야 하는 사람이 나인가 (온라인에서는 내 자리일 때만) */
+    myMove() {
+      const g = this.game;
+      if (g.phase === 'setup') return !!g.setupJob() && g.canAct(g.setupJob().player);
+      if (g.phase === 'discard') return !!g.discardJob() && g.canAct(g.discardJob().player);
+      if (g.pendingPawnReturn) return g.canAct(g.pendingPawnReturn.player);
+      if (g.phase === 'gameover') return false;
+      return g.canAct(g.current);
+    }
+
     report(result) {
       if (result && !result.ok) this.message = result.message;
       this.render();
@@ -175,6 +188,7 @@
     /** 지금 강조해야 하는 칸 목록 */
     targets() {
       const g = this.game;
+      if (!this.myMove()) return [];
       if (g.phase === 'setup') return g.setupCells(g.setupJob().player);
       if (g.phase === 'robber') return B.order.filter(id => id !== g.robber && B.cells[id].terrain !== 'S');
       if (g.phase !== 'action') return [];
@@ -195,7 +209,8 @@
       const captures = new Set(
         (g.phase === 'action' && this.sel ? g.legalMoves(this.sel) : [])
           .filter(m => m.capture).map(m => m.to));
-      const checkers = new Set(g.phase === 'gameover' ? [] : g.checkers(g.current));
+      const threats = this.threats();
+      const mine = threats.find(t => t.player === g.current);
       const myKing = g.kingOf(g.current);
 
       for (const id of B.order) {
@@ -211,17 +226,17 @@
 
         let ring = 'none', dash = 'none';
         if (targets.has(id)) { ring = captures.has(id) ? 'var(--hot)' : 'var(--ink)'; dash = captures.has(id) ? 'none' : '5 4'; }
-        else if (id === myKing && checkers.size) ring = 'var(--hot)';
-        else if (checkers.has(id)) { ring = 'var(--hot)'; dash = '3 3'; }
+        else if (id === myKing && mine) ring = 'var(--hot)';
         n.ring.setAttribute('stroke', ring);
         n.ring.setAttribute('stroke-dasharray', dash);
 
         n.hex.classList.toggle('sel', id === this.sel);
-        const clickable = g.phase === 'setup' || g.phase === 'robber'
-          || (g.phase === 'action' && !g.actionUsed && !g.pendingPawnReturn);
+        const clickable = this.myMove() && (g.phase === 'setup' || g.phase === 'robber'
+          || (g.phase === 'action' && !g.actionUsed && !g.pendingPawnReturn));
         n.hex.classList.toggle('click', clickable);
       }
 
+      this.renderAura(threats);
       this.renderTurn();
       this.renderHand();
       this.renderSummon();
@@ -229,6 +244,47 @@
       this.renderPlayers();
       this.renderLog();
       this.renderBanner();
+    }
+
+    /** 지금 체크를 받고 있는 킹과, 체크를 거는 기물들.
+     *  차례인 사람은 물론, 온라인에서 내 킹이 위협받고 있으면 그것도 같이 보여 준다. */
+    threats() {
+      const g = this.game;
+      if (g.phase === 'gameover' || g.phase === 'setup') return [];
+      const seats = [g.current];
+      if (g.viewer !== null && g.viewer !== g.current) seats.push(g.viewer);
+      const out = [];
+      seats.forEach(i => {
+        if (!g.player(i).alive) return;
+        const by = g.checkers(i);
+        if (by.length) out.push({ player: i, king: g.kingOf(i), by });
+      });
+      return out;
+    }
+
+    /** 체크를 거는 기물과 킹을 붉게 감싸고, 둘을 선으로 잇는다. */
+    renderAura(threats) {
+      const g = this.game;
+      while (this.overlay.firstChild) this.overlay.removeChild(this.overlay.firstChild);
+      threats.forEach(t => {
+        const k = this.nodes[t.king];
+        t.by.forEach(id => {
+          const a = this.nodes[id];
+          svgEl('line', {
+            x1: a.x, y1: a.y, x2: k.x, y2: k.y, class: 'aura-line',
+          }, this.overlay);
+        });
+        t.by.forEach(id => {
+          const a = this.nodes[id];
+          svgEl('circle', { cx: a.x, cy: a.y, r: HEX_R * 1.12, class: 'aura' }, this.overlay);
+          const piece = g.pieces.get(id);
+          if (piece) {
+            const tag = svgEl('text', { x: a.x, y: a.y + HEX_R * 1.28, class: 'aura-tag' }, this.overlay);
+            tag.textContent = P.PIECE_INFO[piece.type].name;
+          }
+        });
+        svgEl('circle', { cx: k.x, cy: k.y, r: HEX_R * 1.12, class: 'aura king' }, this.overlay);
+      });
     }
 
     renderTurn() {
@@ -241,7 +297,12 @@
       if (g.round >= R.FATIGUE_NO_SUMMON) bits.push('소환 불가');
       else if (g.round >= R.FATIGUE_SURCHARGE) bits.push('소환 비용 +1');
       if (g.phase !== 'gameover' && g.inCheck(g.current)) {
-        bits.push(g.hasCheckRelief() ? '체크 — 체크를 푸는 행위만' : '체크 — 풀 방법 없음, 아무 행위나 가능');
+        const by = g.checkers(g.current).map(id => {
+          const pc = g.pieces.get(id);
+          return id + ' ' + (pc ? 'P' + (pc.owner + 1) + ' ' + P.PIECE_INFO[pc.type].name : '');
+        }).join(', ');
+        bits.push('체크 (' + by + ')');
+        bits.push(g.hasCheckRelief() ? '체크를 푸는 행위만' : '풀 방법 없음 — 아무 행위나 가능');
       }
       $('phase').textContent = bits.join(' · ');
 
@@ -249,8 +310,8 @@
       $('dice').innerHTML = d
         ? '<span class="die">' + d[0] + '</span><span class="die">' + d[1] + '</span><span class="sum">= ' + (d[0] + d[1]) + '</span>'
         : '<span class="sum">아직 굴리지 않았습니다</span>';
-      $('roll').disabled = g.phase !== 'roll';
-      $('pass').disabled = !(g.phase === 'action' && !g.pendingPawnReturn);
+      $('roll').disabled = g.phase !== 'roll' || !g.canAct(g.current);
+      $('pass').disabled = !(g.phase === 'action' && !g.pendingPawnReturn && g.canAct(g.current));
     }
 
     clockText() {
@@ -271,14 +332,15 @@
         c.textContent = s + 's';
         c.classList.toggle('low', s <= 10);
       }
-      if (s === 0) g.timeout();
+      if (s === 0 && g.canAct(g.current) && g.useTimer) g.timeout();
     }
 
     /** 손패는 본인만 확인 (규칙서 12장). 핫시트에서는 차례인 사람 것만 펼친다. */
     renderHand() {
       const g = this.game;
-      const owner = g.phase === 'discard' ? g.discardJob().player
-        : (g.phase === 'setup' ? g.setupJob().player : g.current);
+      const owner = g.viewer !== null ? g.viewer
+        : (g.phase === 'discard' ? g.discardJob().player
+          : (g.phase === 'setup' ? g.setupJob().player : g.current));
       const hand = g.player(owner).hand;
       $('handwho').textContent = 'P' + (owner + 1);
       $('hand').innerHTML = B.RESOURCES.map(k =>
@@ -379,12 +441,17 @@
       if (!o) { resp.hidden = true; resp.innerHTML = ''; }
       else {
         resp.hidden = false;
+        const mine = g.canAct(o.to);
         resp.innerHTML = '<p class="lab">P' + (o.from + 1) + ' → P' + (o.to + 1) + ' 제안</p>'
           + '<div>' + esc(R.fmtHand(o.offer) || '없음') + ' ↔ ' + esc(R.fmtHand(o.want) || '없음') + '</div>'
-          + '<div class="row" style="margin-top:7px"><button class="primary" id="acc">P' + (o.to + 1) + ' 수락</button>'
-          + '<button id="rej">거절</button></div>';
-        $('acc').onclick = () => this.report(g.respondTrade(true));
-        $('rej').onclick = () => this.report(g.respondTrade(false));
+          + (mine
+            ? '<div class="row" style="margin-top:7px"><button class="primary" id="acc">P' + (o.to + 1) + ' 수락</button>'
+              + '<button id="rej">거절</button></div>'
+            : '<p class="lab" style="margin-top:7px">P' + (o.to + 1) + '의 대답을 기다립니다.</p>');
+        if (mine) {
+          $('acc').onclick = () => this.report(g.respondTrade(true));
+          $('rej').onclick = () => this.report(g.respondTrade(false));
+        }
       }
     }
 
@@ -461,7 +528,8 @@
       }
 
       bar.classList.toggle('err', !!this.message && !wire);
-      if (wire) bar.querySelectorAll('button').forEach(b => { b.onclick = () => wire(b); });
+      if (wire && this.myMove()) bar.querySelectorAll('button').forEach(b => { b.onclick = () => wire(b); });
+      else if (wire) bar.querySelectorAll('button').forEach(b => { b.disabled = true; });
     }
 
     // ---- 패널 버튼 -------------------------------------------------------
@@ -490,7 +558,11 @@
         this.render();
       };
       $('timer').setAttribute('aria-pressed', g.useTimer);
-      $('restart').onclick = () => { if (confirm('새 게임을 시작할까요?')) location.reload(); };
+      $('restart').onclick = () => {
+        if (!confirm('새 게임을 시작할까요?')) return;
+        if (global.Net && global.Net.token) global.Net.reset();   // 온라인은 모두에게 적용
+        else location.reload();
+      };
     }
   }
 

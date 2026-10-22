@@ -34,6 +34,9 @@
       this.rng = opts.rng || Math.random;
       this.useTimer = opts.useTimer !== false;
       this.onChange = opts.onChange || function () {};
+      // 이 쪽에서 조작해도 되는 자리. 핫시트는 세 자리 모두, 온라인은 내 자리 하나.
+      this.controls = opts.controls || [0, 1, 2];
+      this.viewer = opts.viewer === undefined ? null : opts.viewer;
 
       this.owners = {};                 // 칸id -> 플레이어 인덱스 (점령, 규칙서 7장)
       this.pieces = new Map();          // 칸id -> {owner, type}
@@ -81,7 +84,14 @@
     say(text) { this.log.push({ round: this.round, text }); }
     alivePlayers() { return this.players.filter(p => p.alive); }
     player(i) { return this.players[i]; }
-    handSize(i) { return handSize(this.players[i].hand); }
+    /** 남의 손패는 종류가 가려져 있으므로(12장) 장수만 따로 들고 있는다. */
+    handSize(i) {
+      const p = this.players[i];
+      return p.hidden ? p.hiddenCount : handSize(p.hand);
+    }
+
+    /** 이 자리를 내가 조작할 수 있는가 */
+    canAct(i) { return this.controls.indexOf(i) >= 0; }
     kingOf(i) { return P.findKing(this.pieces, i); }
     inCheck(i) { return P.inCheck(this.pieces, i); }
     checkers(i) { return P.checkers(this.pieces, i); }
@@ -164,6 +174,7 @@
       const piece = this.pieces.get(from);
       if (!piece || piece.owner !== this.current) return [];
       if (this.phase !== 'action' || this.actionUsed) return [];
+      if (!this.canAct(this.current)) return [];
       const all = P.moves(this.pieces, from);
       if (!this.inCheck(this.current) || !this.hasCheckRelief()) return all;
       return all.filter(m => !P.inCheck(P.withMove(this.pieces, from, m.to), this.current));
@@ -172,6 +183,7 @@
     legalSummonCells(type) {
       const i = this.current;
       if (this.phase !== 'action' || this.actionUsed) return [];
+      if (!this.canAct(i)) return [];
       if (this.summonBlocked()) return [];
       if (type === 'Q' && this.queenOnBoard(i)) return [];
       const cells = this.summonCells(i);
@@ -358,7 +370,7 @@
 
     // ---- 교역 ------------------------------------------------------------
 
-    canTrade() { return this.phase === 'action' && !this.actionUsed; }
+    canTrade() { return this.phase === 'action' && !this.actionUsed && this.canAct(this.current); }
 
     /** 은행 4:1 */
     tradeBank(from, to) {
@@ -599,6 +611,75 @@
     secondsLeft() {
       if (!this.deadline) return null;
       return Math.max(0, Math.ceil((this.deadline - Date.now()) / 1000));
+    }
+
+    // ---- 직렬화 (온라인 대전) ---------------------------------------------
+
+    /**
+     * 한 플레이어에게 보낼 상태. viewer 가 아닌 사람의 손패는 종류를 가리고 장수만 남긴다
+     * (규칙서 12장). viewer 가 null 이면 관전자용으로 모두 가린다.
+     */
+    snapshot(viewer) {
+      return {
+        owners: Object.assign({}, this.owners),
+        pieces: Array.from(this.pieces, ([id, p]) => [id, p.owner, p.type]),
+        players: this.players.map(p => {
+          const mine = p.index === viewer;
+          return {
+            index: p.index,
+            hand: mine ? Object.assign({}, p.hand) : null,
+            count: handSize(p.hand),
+            alive: p.alive,
+            eliminatedRound: p.eliminatedRound,
+          };
+        }),
+        robber: this.robber,
+        round: this.round,
+        current: this.current,
+        turnStarts: this.turnStarts,
+        dice: this.dice,
+        actionUsed: this.actionUsed,
+        phase: this.phase,
+        setupQueue: this.setupQueue.map(j => ({ player: j.player, type: j.type })),
+        pendingDiscards: this.pendingDiscards.map(d => ({ player: d.player, count: d.count })),
+        pendingPawnReturn: this.pendingPawnReturn && Object.assign({}, this.pendingPawnReturn),
+        offer: this.offer && JSON.parse(JSON.stringify(this.offer)),
+        winners: this.winners && this.winners.slice(),
+        log: this.log.slice(-120),
+        secondsLeft: this.secondsLeft(),
+        viewer: viewer === undefined ? null : viewer,
+      };
+    }
+
+    /** 서버에서 받은 상태로 이 게임을 덮어쓴다. */
+    applySnapshot(s) {
+      this.owners = Object.assign({}, s.owners);
+      this.pieces = new Map(s.pieces.map(([id, owner, type]) => [id, { owner, type }]));
+      s.players.forEach(p => {
+        const mine = this.players[p.index];
+        mine.hand = p.hand ? Object.assign({}, p.hand) : emptyHand();
+        mine.hidden = !p.hand;             // 가려진 손패는 장수만 믿는다
+        mine.hiddenCount = p.count;
+        mine.alive = p.alive;
+        mine.eliminatedRound = p.eliminatedRound;
+      });
+      this.robber = s.robber;
+      this.round = s.round;
+      this.current = s.current;
+      this.turnStarts = s.turnStarts;
+      this.dice = s.dice;
+      this.actionUsed = s.actionUsed;
+      this.phase = s.phase;
+      this.setupQueue = s.setupQueue.map(j => ({ player: j.player, type: j.type }));
+      this.pendingDiscards = s.pendingDiscards.map(d => ({ player: d.player, count: d.count }));
+      this.pendingPawnReturn = s.pendingPawnReturn ? Object.assign({}, s.pendingPawnReturn) : null;
+      this.offer = s.offer ? JSON.parse(JSON.stringify(s.offer)) : null;
+      this.winners = s.winners ? s.winners.slice() : null;
+      this.log = s.log.slice();
+      this.viewer = s.viewer;
+      this.deadline = s.secondsLeft === null ? null : Date.now() + s.secondsLeft * 1000;
+      this._reliefKey = null;
+      return this;
     }
 
     // ---- 결과 통지 -------------------------------------------------------

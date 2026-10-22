@@ -19,13 +19,16 @@
     K: { name: '킹',     value: 0, glyph: '♚' },
   };
 
-  /* 소환 비용 (규칙서 8장). 킹은 소환 대상이 아니다. */
+  /* 소환 비용. 규칙서 8장 표에서 두 가지를 조정했다.
+   *  - 모든 기물 가격 2배
+   *  - 룩과 비숍의 재료를 맞바꿈 (룩이 마석을, 비숍이 목재를 쓴다)
+   * 원래 표는 폰 식1목1 / 나이트 식1철2 / 비숍 식1철1마1 / 룩 목2철1 / 퀸 식1철2마2 였다. */
   const COSTS = {
-    P: { F: 1, W: 1 },
-    N: { F: 1, I: 2 },
-    B: { F: 1, I: 1, M: 1 },
-    R: { W: 2, I: 1 },
-    Q: { F: 1, I: 2, M: 2 },
+    P: { F: 2, W: 2 },
+    N: { F: 2, I: 4 },
+    B: { W: 4, I: 2 },           // 원래 룩의 재료
+    R: { F: 2, I: 2, M: 2 },     // 원래 비숍의 재료
+    Q: { F: 2, I: 4, M: 4 },
   };
 
   const SUMMONABLE = ['P', 'N', 'B', 'R', 'Q'];
@@ -82,9 +85,8 @@
     const out = [];
 
     switch (piece.type) {
-      case 'K':   // 변 6방향 + 꼭짓점 6방향으로 1칸 (총 12칸)
+      case 'K':   // 변이 맞닿은 주변 6칸으로 1칸 (조정: 꼭짓점 방향은 쓰지 않는다)
         hop(pieces, from, B.EDGE_DIRS, owner, out);
-        hop(pieces, from, B.DIAG_DIRS, owner, out);
         break;
       case 'Q':   // 룩 + 비숍
         slide(pieces, from, B.EDGE_DIRS, owner, out);

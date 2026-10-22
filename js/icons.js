@@ -3,6 +3,8 @@
  */
 window.ICONS = [
   '<defs>',
+  // 체크 아우라: 가운데는 비고 테두리만 빛나는 고리. 색은 CSS 에서 넣는다(속성에는 var() 를 못 쓴다).
+  '<radialGradient id="aura-danger"><stop offset="40%" class="as0"/><stop offset="70%" class="as1"/><stop offset="92%" class="as2"/><stop offset="100%" class="as3"/></radialGradient>',
   '<symbol id="i-F" viewBox="0 0 24 24"><path d="M12 23V7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/><g fill="currentColor"><ellipse cx="12" cy="4.2" rx="1.6" ry="3"/><ellipse cx="9.4" cy="9" rx="1.6" ry="3" transform="rotate(-32 9.4 9)"/><ellipse cx="14.6" cy="9" rx="1.6" ry="3" transform="rotate(32 14.6 9)"/><ellipse cx="9.4" cy="13.6" rx="1.6" ry="3" transform="rotate(-32 9.4 13.6)"/><ellipse cx="14.6" cy="13.6" rx="1.6" ry="3" transform="rotate(32 14.6 13.6)"/><ellipse cx="9.4" cy="18.2" rx="1.6" ry="3" transform="rotate(-32 9.4 18.2)"/><ellipse cx="14.6" cy="18.2" rx="1.6" ry="3" transform="rotate(32 14.6 18.2)"/></g></symbol>',
   '<symbol id="i-W" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.5 6.2 9.2h3.3L4.8 15.4h4.1L4 21h16l-4.9-5.6h4.1l-4.7-6.2h3.3Z"/><rect x="10.6" y="20" width="2.8" height="3.5" fill="currentColor"/></symbol>',
   '<symbol id="i-I" viewBox="0 0 24 24"><g fill="currentColor"><path d="M6.3 13.6 8.6 7.4h6.8l2.3 6.2Z"/><path d="M1.5 21.5 3.8 15.2h6.8l2.3 6.3Z"/><path d="M11.1 21.5l2.3-6.3h6.8l2.3 6.3Z"/></g><path class="facet" d="M8.6 7.4 9.6 10h4.8l1-2.6M3.8 15.2l1 2.6h4.8l1-2.6M13.4 15.2l1 2.6h4.8l1-2.6"/></symbol>',

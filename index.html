@@ -16,6 +16,7 @@
       <div class="sub">3인용 육각 전략 — 점령 → 생산 → 소환 → 상대 킹 사살. 한 기기에서 번갈아 두는 핫시트 방식입니다.</div>
     </div>
     <div class="row">
+      <span class="pill" id="netstatus" hidden></span>
       <button id="timer" aria-pressed="true">30초 제한</button>
       <button id="restart">다시 시작</button>
     </div>
@@ -109,6 +110,8 @@
           <li>점령은 마지막으로 밟은 사람의 것. 기물이 떠나도 유지. 본진은 생산 없음.</li>
           <li>잡으면 약탈 1장. 킹을 잡으면 그 플레이어 탈락, 자원 절반을 가져갑니다.</li>
           <li>폰이 전진 방향 판 끝에 닿으면 판에서 빠지고 원하는 자원 2장.</li>
+          <li>킹은 변이 맞닿은 주변 6칸으로만 1칸 — 킹이 갈 수 있는 곳이 곧 소환할 수 있는 곳입니다.</li>
+          <li>체크를 받으면 거는 기물과 내 킹이 붉은 아우라로 이어집니다.</li>
           <li>17라운드부터 소환 +1, 27라운드부터 소환 불가, 32라운드 종료 시 점령 수로 판정.</li>
         </ul>
       </div>
@@ -121,10 +124,23 @@
 <script src="js/game.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/net.js"></script>
 <script>
-  const game = new GameRules.Game({ useTimer: true });
-  const ui = new UI(game, document.getElementById('board'));
-  window.game = game; window.ui = ui;   // 콘솔에서 상태를 들여다볼 수 있게
+  // 서버에서 열었으면 온라인 대전, 파일을 그냥 열었으면 핫시트.
+  // 서버로 열었더라도 ?mode=hotseat 를 붙이면 한 기기에서 셋 다 둘 수 있다.
+  const online = location.protocol.startsWith('http')
+    && !/[?&]mode=hotseat/.test(location.search);
+
+  if (online) {
+    document.getElementById('netstatus').hidden = false;
+    document.querySelector('header .sub').textContent =
+      '3인용 육각 전략 — 점령 → 생산 → 소환 → 상대 킹 사살. 다른 컴퓨터와 같은 판에서 둡니다.';
+    Net.start();
+  } else {
+    const game = new GameRules.Game({ useTimer: true });
+    const ui = new UI(game, document.getElementById('board'));
+    window.game = game; window.ui = ui;   // 콘솔에서 상태를 들여다볼 수 있게
+  }
 </script>
 </body>
 </html>

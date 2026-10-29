@@ -6,7 +6,7 @@
  * 턴 구조 (규칙서 5장)
  *   setup  : 첫 공짜 소환 — 킹 주변 2칸에 폰2 + 나이트1
  *   roll   : 주사위 2개
- *   discard: 합이 7 이고 8장 이상 가진 플레이어가 절반 버리기
+ *   discard: 합이 7 이고 11장을 넘게(12장 이상) 가진 플레이어가 절반 버리기
  *   robber : 합이 7 이면 굴린 사람이 도둑을 옮기고 1장 약탈, 그 뒤 f6 생산
  *   action : 교역은 자유, 이동 또는 소환 중 하나만 1회 → 턴 종료
  */
@@ -17,7 +17,7 @@
   const P = global.Pieces;
 
   const TURN_SECONDS = 35;          // 규칙서 5장은 30초 — 조정해서 35초
-  const DISCARD_LIMIT = 8;          // 이 장수부터 절반 버리기
+  const DISCARD_LIMIT = 12;         // 이 장수부터 절반 버리기 (초안은 8 — 11장을 넘으면으로 조정)
   const BANK_RATE = 4;              // 은행 교역 4:1
   const FATIGUE_SURCHARGE = 17;     // 이 라운드부터 소환 비용 +1
   const FATIGUE_NO_SUMMON = 27;     // 이 라운드부터 소환 불가

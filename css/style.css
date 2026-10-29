@@ -58,6 +58,14 @@ header .sub { color:var(--muted); font-size:13.5px }
   text-anchor:middle; dominant-baseline:central;
 }
 .tok text.hot { fill:var(--hot); font-weight:700 }
+/* 기물 아래 숫자 배지 — 이 칸이 몇에 생산하는지 */
+.badge { pointer-events:none }
+.badge circle { fill:var(--token); stroke:rgba(0,0,0,.45); stroke-width:1 }
+.badge text {
+  font-family:var(--font-mono); font-size:10px; font-weight:700; fill:var(--token-ink);
+  text-anchor:middle; dominant-baseline:central;
+}
+.badge text.hot { fill:var(--hot) }
 .glyph {
   font-size:30px; text-anchor:middle; dominant-baseline:central;
   paint-order:stroke; stroke:var(--halo); stroke-width:3.4px; stroke-linejoin:round;
@@ -70,7 +78,7 @@ header .sub { color:var(--muted); font-size:13.5px }
 .sel { stroke:var(--ink); stroke-width:3.4 }
 /* 도둑: 맨 위 층에 원판 + 아이콘. 도둑이 있는 칸은 살짝 어둡게. */
 .robber-mark { pointer-events:none }
-.robber-disc { fill:#24221f; stroke:var(--hot); stroke-width:2.4 }
+.robber-disc { fill:var(--by, #24221f); stroke:#fff; stroke-width:2.2 }
 .robber-glyph {
   font-size:15px; text-anchor:middle; dominant-baseline:central;
   font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;

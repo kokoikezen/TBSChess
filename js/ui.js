@@ -104,6 +104,16 @@
         node.hl = svgEl('polygon', { points: this.hexPoints(X, Y, HEX_R - 2), class: 'hl' }, g);
         node.ring = svgEl('circle', { cx: X, cy: Y, r: HEX_R - 7, class: 'ring', stroke: 'none' }, g);
         node.glyph = svgEl('text', { x: X, y: Y + 1, class: 'glyph' }, g);
+        // 기물이 숫자 토큰을 가리므로, 기물이 서 있을 때는 아래쪽에 숫자를 작게 다시 적는다
+        if (c.dice) {
+          node.badge = svgEl('g', { class: 'badge' }, g);
+          svgEl('circle', { cx: X, cy: Y + HEX_R * 0.64, r: 7.2 }, node.badge);
+          svgEl('text', {
+            x: X, y: Y + HEX_R * 0.64 + 0.5,
+            class: (c.dice === 6 || c.dice === 7 || c.dice === 8) ? 'hot' : '',
+          }, node.badge).textContent = c.dice;
+          node.badge.style.display = 'none';
+        }
 
         node.hex.addEventListener('click', () => this.click(id));
         node.hex.addEventListener('keydown', e => {
@@ -230,6 +240,7 @@
         const piece = g.pieces.get(id);
         n.glyph.textContent = piece ? P.PIECE_INFO[piece.type].glyph : '';
         n.glyph.setAttribute('fill', piece ? 'var(' + PCOL[piece.owner] + ')' : 'none');
+        if (n.badge) n.badge.style.display = piece ? '' : 'none';
 
         n.hex.classList.toggle('robbed', g.robber === id);
 
@@ -271,6 +282,9 @@
       const id = this.game.robber;
       if (!id) { this.robberMark.style.display = 'none'; return; }
       const n = this.nodes[id];
+      const by = this.game.robberBy;
+      // 원판은 도둑을 옮긴 사람의 진영 색
+      this.robberMark.style.setProperty('--by', by === null || by === undefined ? 'var(--hot)' : 'var(' + PCOL[by] + ')');
       this.robberMark.style.display = '';
       this.robberMark.setAttribute('transform',
         'translate(' + (n.x + HEX_R * 0.5).toFixed(1) + ',' + (n.y - HEX_R * 0.48).toFixed(1) + ')');
@@ -498,7 +512,9 @@
         + 'P' + (who + 1) + ' · ' + B.HOMES[who] + '</span>'
         + '<span class="clock' + (this.lowClock() ? ' low' : '') + '" id="clock">' + this.clockText() + '</span>';
       const bits = [PHASE_TEXT[g.phase], g.round + '라운드'];
-      bits.push(g.robber ? '🦝 도둑 ' + g.robber : '🦝 도둑 판 밖');
+      bits.push(g.robber
+        ? '🦝 도둑 ' + g.robber + (g.robberBy !== null ? ' (P' + (g.robberBy + 1) + '이 옮김)' : '')
+        : '🦝 도둑 판 밖');
       if (g.round >= R.FATIGUE_NO_SUMMON) bits.push('소환 불가');
       else if (g.round >= R.FATIGUE_SURCHARGE) bits.push('소환 비용 +1');
       if (g.phase !== 'gameover' && g.inCheck(g.current)) {

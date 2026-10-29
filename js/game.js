@@ -52,6 +52,7 @@
       }));
 
       this.robber = null;               // 도둑은 판 밖에서 시작
+      this.robberBy = null;             // 도둑을 마지막으로 옮긴 플레이어
       this.round = 1;
       this.current = this.seats[0];
       this.turnStarts = 0;              // 이번 라운드에 턴을 시작한 생존 플레이어 수
@@ -362,7 +363,8 @@
       if (!B.cells[id]) return this.fail('없는 칸입니다.');
       if (id === this.robber) return this.fail('도둑을 같은 칸에 둘 수는 없습니다.');
       this.robber = id;
-      this.say('도둑이 ' + id + '로 이동했습니다.');
+      this.robberBy = this.current;
+      this.say('P' + (this.current + 1) + '이 도둑을 ' + id + '로 옮겼습니다.');
       const victim = this.owners[id];
       if (victim !== undefined && victim !== this.current && this.players[victim].alive) {
         const res = this.stealRandom(victim, this.current);
@@ -652,6 +654,7 @@
         }),
         seats: this.seats.slice(),
         robber: this.robber,
+        robberBy: this.robberBy,
         round: this.round,
         current: this.current,
         turnStarts: this.turnStarts,
@@ -684,6 +687,7 @@
       });
       if (s.seats) this.seats = s.seats.slice();
       this.robber = s.robber;
+      this.robberBy = s.robberBy === undefined ? null : s.robberBy;
       this.round = s.round;
       this.current = s.current;
       this.turnStarts = s.turnStarts;

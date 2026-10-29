@@ -17,7 +17,7 @@
     </div>
     <div class="row">
       <span class="pill" id="netstatus" hidden></span>
-      <button id="timer" aria-pressed="true">30초 제한</button>
+      <button id="timer" aria-pressed="true">35초 제한</button>
       <select id="pcount" aria-label="새 게임 인원">
         <option value="3">3인전</option>
         <option value="2">2인전</option>
@@ -28,6 +28,7 @@
 
   <div class="layout">
     <section class="boardbox">
+      <div class="fatigue" id="fatigue"></div>
       <svg id="board" role="img" aria-label="카탄 증강 체스 육각 보드"></svg>
       <div class="toast" id="toast" role="status" aria-live="assertive" hidden></div>
       <div class="banner" id="banner"></div>
@@ -122,6 +123,22 @@
         </ul>
       </div>
     </aside>
+  </div>
+</div>
+
+<div class="modal" id="endmodal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="endtitle">
+    <div class="modal-icon" id="endicon"></div>
+    <h2 id="endtitle"></h2>
+    <p id="endwhy"></p>
+    <div class="row" style="justify-content:center;margin-top:14px">
+      <select id="endcount" aria-label="새 게임 인원">
+        <option value="3">3인전</option>
+        <option value="2">2인전</option>
+      </select>
+      <button class="primary" id="endrestart">다시 시작</button>
+      <button id="endclose">판 보기</button>
+    </div>
   </div>
 </div>
 

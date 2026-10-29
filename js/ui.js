@@ -45,6 +45,8 @@
       this.message = '';
       this.nodes = {};
       this.lastAttention = null;  // 마지막으로 알린 "내가 할 일" — 바뀔 때만 다시 알린다
+      this.fatigueStage = null;   // 전쟁 피로 단계 — 올라가는 순간 모두에게 알린다
+      this.endShown = false;      // 게임 종료 창은 판마다 한 번만 띄운다
       this.baseTitle = document.title;
       this.buildBoard();
       this.bindPanels();
@@ -99,9 +101,9 @@
         }
 
         node.own = svgEl('polygon', { points: this.hexPoints(X, Y, HEX_R - 3.2), class: 'own', stroke: 'none' }, g);
+        node.hl = svgEl('polygon', { points: this.hexPoints(X, Y, HEX_R - 2), class: 'hl' }, g);
         node.ring = svgEl('circle', { cx: X, cy: Y, r: HEX_R - 7, class: 'ring', stroke: 'none' }, g);
         node.glyph = svgEl('text', { x: X, y: Y + 1, class: 'glyph' }, g);
-        node.robber = svgEl('text', { x: X + HEX_R * 0.52, y: Y - HEX_R * 0.5, class: 'robber' }, g);
 
         node.hex.addEventListener('click', () => this.click(id));
         node.hex.addEventListener('keydown', e => {
@@ -112,6 +114,11 @@
       this.drawAxes();
       // 아우라와 연결선은 모든 칸 위에 그려야 이웃 칸에 가리지 않는다.
       this.overlay = svgEl('g', { class: 'overlay' }, this.svg);
+      // 도둑도 맨 위에 그린다. 칸 안에 두면 뒤에 그려진 이웃 칸에 가려 보이지 않았다.
+      this.robberMark = svgEl('g', { class: 'robber-mark' }, this.svg);
+      svgEl('circle', { cx: 0, cy: 0, r: 12.5, class: 'robber-disc' }, this.robberMark);
+      svgEl('text', { x: 0, y: 1, class: 'robber-glyph' }, this.robberMark).textContent = '🦝';
+      this.robberMark.style.display = 'none';
     }
 
     px(c) { return this.cx + c.x * 1.5 * HEX_R; }
@@ -224,7 +231,7 @@
         n.glyph.textContent = piece ? P.PIECE_INFO[piece.type].glyph : '';
         n.glyph.setAttribute('fill', piece ? 'var(' + PCOL[piece.owner] + ')' : 'none');
 
-        n.robber.textContent = g.robber === id ? '🦝' : '';
+        n.hex.classList.toggle('robbed', g.robber === id);
 
         let ring = 'none', dash = 'none';
         const robberTarget = g.phase === 'robber' && targets.has(id);
@@ -236,6 +243,8 @@
         n.ring.setAttribute('stroke', ring);
         n.ring.setAttribute('stroke-dasharray', dash);
         n.ring.classList.toggle('pulse', robberTarget || promoting);
+        // 갈 수 있는 칸 · 놓을 수 있는 칸은 밝은 노란색으로 반짝인다 (도둑 칸 고르기는 붉은 점선 그대로)
+        n.hl.classList.toggle('on', targets.has(id) && !robberTarget);
 
         n.hex.classList.toggle('sel', id === this.sel);
         const clickable = this.myMove() && (g.phase === 'setup' || g.phase === 'robber'
@@ -244,6 +253,8 @@
       }
 
       this.renderAura(threats);
+      this.renderRobber();
+      this.renderFatigue();
       this.renderTurn();
       this.renderHand();
       this.renderSummon();
@@ -252,6 +263,90 @@
       this.renderLog();
       this.renderBanner();
       this.renderAttention();
+      this.renderEnd();
+    }
+
+    /** 도둑 표시 — 칸 오른쪽 위에 작은 원판 */
+    renderRobber() {
+      const id = this.game.robber;
+      if (!id) { this.robberMark.style.display = 'none'; return; }
+      const n = this.nodes[id];
+      this.robberMark.style.display = '';
+      this.robberMark.setAttribute('transform',
+        'translate(' + (n.x + HEX_R * 0.5).toFixed(1) + ',' + (n.y - HEX_R * 0.48).toFixed(1) + ')');
+    }
+
+    // ---- 전쟁 피로 -------------------------------------------------------
+
+    /** 0: 평시, 1: 소환 +1, 2: 소환 불가 */
+    fatigueStageOf(round) {
+      return round >= R.FATIGUE_NO_SUMMON ? 2 : (round >= R.FATIGUE_SURCHARGE ? 1 : 0);
+    }
+
+    /** 보드 맨 위 줄 — 전쟁 피로까지 몇 라운드 남았는지. 단계가 올라가면 알린다. */
+    renderFatigue() {
+      const g = this.game;
+      const r = g.round;
+      const stage = this.fatigueStageOf(r);
+      const left = n => '<b>' + n + '라운드</b>';
+      let html;
+      if (g.phase === 'gameover') html = '게임 종료 · ' + r + '라운드';
+      else if (stage === 0) {
+        html = '전쟁 피로까지 ' + left(R.FATIGUE_SURCHARGE - r) + ' 남음 <span class="lab">'
+          + R.FATIGUE_SURCHARGE + '라운드부터 소환 비용 +1</span>';
+      } else if (stage === 1) {
+        html = '<span class="warn">전쟁 피로</span> 소환 비용 +1 · 소환 불가까지 ' + left(R.FATIGUE_NO_SUMMON - r) + ' 남음';
+      } else {
+        html = '<span class="warn">전쟁 피로</span> 소환 불가 · 게임 종료까지 ' + left(R.FINAL_ROUND - r + 1) + ' 남음';
+      }
+      const el = $('fatigue');
+      el.innerHTML = '<span class="rnd">' + r + ' / ' + R.FINAL_ROUND + '라운드</span>' + html;
+      el.classList.toggle('on', stage > 0 && g.phase !== 'gameover');
+
+      // 처음 그릴 때는 알리지 않는다 (중간에 접속한 사람에게 지난 일을 알리지 않도록)
+      if (this.fatigueStage !== null && stage > this.fatigueStage && g.phase !== 'gameover') {
+        // 라운드가 바뀌는 순간은 차례 알림과 겹치므로, 띄우는 일은 renderAttention 이 합쳐서 한다
+        this.fatigueNote = stage === 1
+          ? '⚔ 전쟁 피로 시작! 이제 모든 소환 비용 +1'
+          : '⚔ 전쟁 피로 심화! 이제 소환할 수 없습니다';
+      }
+      this.fatigueStage = stage;
+    }
+
+    // ---- 게임 종료 -------------------------------------------------------
+
+    renderEnd() {
+      const g = this.game;
+      const modal = $('endmodal');
+      if (g.phase !== 'gameover') { this.endShown = false; modal.hidden = true; return; }
+      if (this.endShown) return;
+      this.endShown = true;
+
+      const winners = g.winners || [];
+      const names = winners.map(i => 'P' + (i + 1)).join(' · ');
+      const last = g.log.length ? g.log[g.log.length - 1].text : '';
+      const why = (last.match(/\((.*)\)$/) || [])[1] || '';
+      let title, icon, kind;
+      if (g.viewer === null) { title = names + ' 승리!'; icon = '🏆'; kind = 'win'; }
+      else if (winners.indexOf(g.viewer) >= 0) {
+        title = winners.length > 1 ? '공동 승리! (' + names + ')' : '승리!'; icon = '🏆'; kind = 'win';
+      } else { title = '패배'; icon = '💀'; kind = 'lose'; }
+
+      $('endicon').textContent = icon;
+      $('endtitle').textContent = title;
+      $('endwhy').textContent = (g.viewer !== null && kind === 'lose' ? names + ' 승리 — ' : '') + why;
+      modal.querySelector('.modal-card').className = 'modal-card ' + kind;
+      $('endcount').value = $('pcount').value;
+      modal.hidden = false;
+      if (!this.hotseat()) this.beep(kind === 'win' ? 'turn' : 'danger');
+    }
+
+    /** 새 게임. 온라인은 방 전체에, 핫시트는 페이지를 새로 연다. */
+    restart(count) {
+      if (global.Net && global.Net.token) { global.Net.reset(count); return; }
+      const url = new URL(location.href);
+      if (count === 2) url.searchParams.set('players', '2'); else url.searchParams.delete('players');
+      location.href = url.toString();
     }
 
     // ---- 내 차례 알림 ----------------------------------------------------
@@ -306,9 +401,16 @@
 
       const att = this.attention();
       const key = att ? att.key : null;
-      if (key === this.lastAttention) return;
+      const fresh = att && key !== this.lastAttention;
       this.lastAttention = key;
-      if (!att) return;
+      const note = this.fatigueNote;
+      this.fatigueNote = null;
+      if (note) {
+        this.toast(note + (fresh ? '\n' + att.text : ''), 'danger');
+        if (!this.hotseat()) this.beep('danger');
+        return;
+      }
+      if (!fresh) return;
       this.toast(att.text, att.kind);
       if (!this.hotseat()) this.beep(att.kind);
     }
@@ -396,6 +498,7 @@
         + 'P' + (who + 1) + ' · ' + B.HOMES[who] + '</span>'
         + '<span class="clock' + (this.lowClock() ? ' low' : '') + '" id="clock">' + this.clockText() + '</span>';
       const bits = [PHASE_TEXT[g.phase], g.round + '라운드'];
+      bits.push(g.robber ? '🦝 도둑 ' + g.robber : '🦝 도둑 판 밖');
       if (g.round >= R.FATIGUE_NO_SUMMON) bits.push('소환 불가');
       else if (g.round >= R.FATIGUE_SURCHARGE) bits.push('소환 비용 +1');
       if (g.phase !== 'gameover' && g.inCheck(g.current)) {
@@ -680,13 +783,15 @@
       $('restart').onclick = () => {
         const count = +$('pcount').value;
         if (!confirm(count + '인전으로 새 게임을 시작할까요?')) return;
-        if (global.Net && global.Net.token) global.Net.reset(count);   // 온라인은 모두에게 적용
-        else {
-          const url = new URL(location.href);
-          if (count === 2) url.searchParams.set('players', '2'); else url.searchParams.delete('players');
-          location.href = url.toString();
-        }
+        this.restart(count);
       };
+      $('endrestart').onclick = () => {
+        const count = +$('endcount').value;
+        $('pcount').value = String(count);
+        $('endmodal').hidden = true;
+        this.restart(count);
+      };
+      $('endclose').onclick = () => { $('endmodal').hidden = true; };
     }
   }
 

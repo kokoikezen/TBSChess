@@ -16,7 +16,7 @@
   const B = global.Board;
   const P = global.Pieces;
 
-  const TURN_SECONDS = 30;          // 규칙서 5장
+  const TURN_SECONDS = 35;          // 규칙서 5장은 30초 — 조정해서 35초
   const DISCARD_LIMIT = 8;          // 이 장수부터 절반 버리기
   const BANK_RATE = 4;              // 은행 교역 4:1
   const FATIGUE_SURCHARGE = 17;     // 이 라운드부터 소환 비용 +1
@@ -179,7 +179,11 @@
       if (!piece || piece.owner !== this.current) return [];
       if (this.phase !== 'action' || this.actionUsed) return [];
       if (!this.canAct(this.current)) return [];
-      const all = P.moves(this.pieces, from);
+      let all = P.moves(this.pieces, from);
+      // 조정: 킹은 공격받는 칸(들어가면 체크가 되는 칸)으로는 갈 수 없다
+      if (piece.type === 'K') {
+        all = all.filter(m => !P.inCheck(P.withMove(this.pieces, from, m.to), this.current));
+      }
       if (!this.inCheck(this.current) || !this.hasCheckRelief()) return all;
       return all.filter(m => !P.inCheck(P.withMove(this.pieces, from, m.to), this.current));
     }

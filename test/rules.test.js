@@ -303,6 +303,19 @@ test('퀸이 이미 있으면 퀸으로는 승급할 수 없고, 시간이 지�
   eq(g.current, 1, '그리고 턴이 넘어간다');
 });
 
+test('킹은 공격받는 칸으로 들어갈 수 없다', () => {
+  const g = bare();
+  put(g, 'g2', 1, 'R');       // g열 직선으로 g10 을 노린다 (f11 킹은 노리지 않는다)
+  rig(g, 2);
+  g.roll();
+  ok(!g.inCheck(0), '지금은 체크가 아니다');
+  ok(P.moves(g.pieces, 'f11').some(m => m.to === 'g10'), '기물 규칙만 보면 g10 으로 갈 수 있지만');
+  const tos = g.legalMoves('f11').map(m => m.to);
+  ok(tos.indexOf('g10') < 0, '공격받는 g10 은 막힌다');
+  ok(tos.length > 0, '안전한 칸으로는 갈 수 있다');
+  ok(!g.move('f11', 'g10').ok, '서버 판정도 거부');
+});
+
 test('기물을 잡으면 자원 1장을 약탈한다', () => {
   const g = bare();
   put(g, 'f10', 0, 'R');

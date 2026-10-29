@@ -68,8 +68,19 @@ header .sub { color:var(--muted); font-size:13.5px }
 .ring.move { stroke-dasharray:none }
 .dot { pointer-events:none }
 .sel { stroke:var(--ink); stroke-width:3.4 }
-.robber { pointer-events:none }
-.robber text { font-size:20px; text-anchor:middle; dominant-baseline:central }
+/* 도둑: 맨 위 층에 원판 + 아이콘. 도둑이 있는 칸은 살짝 어둡게. */
+.robber-mark { pointer-events:none }
+.robber-disc { fill:#24221f; stroke:var(--hot); stroke-width:2.4 }
+.robber-glyph {
+  font-size:15px; text-anchor:middle; dominant-baseline:central;
+  font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;
+}
+.hex.robbed { filter:brightness(.72) saturate(.7) }
+
+/* 갈 수 있는 칸 — 밝은 노란색으로 반짝반짝 */
+.hl { fill:#ffe83a; stroke:#fff59a; stroke-width:2.5; opacity:0; pointer-events:none }
+.hl.on { animation:hl-twinkle .9s ease-in-out infinite }
+@keyframes hl-twinkle { 0%,100% { opacity:.4 } 50% { opacity:.88 } }
 
 .banner {
   margin-top:10px; padding:9px 13px; border-radius:10px; border:1px solid var(--line);
@@ -192,7 +203,7 @@ select {
   padding:14px 22px; border-radius:14px; font-size:clamp(16px,2.4vw,22px); font-weight:600;
   background:var(--panel); color:var(--ink); border:3px solid var(--me, var(--ink));
   box-shadow:0 10px 30px rgba(0,0,0,.25); pointer-events:none; text-align:center;
-  max-width:calc(100% - 32px); z-index:5;
+  max-width:calc(100% - 32px); z-index:5; white-space:pre-line;
 }
 .toast.danger { border-color:var(--hot); color:var(--hot) }
 .toast.show { animation:toast-in 2.6s ease forwards }
@@ -222,4 +233,39 @@ tr.cur td { font-weight:600 }
 @media (prefers-reduced-motion:reduce) {
   .toast.show, .banner.alert, .ring.pulse { animation:none }
   .toast.show { opacity:1; transform:translate(-50%,-50%) }
+}
+
+/* ---- 전쟁 피로 줄 (보드 맨 위) ---- */
+.fatigue {
+  display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline;
+  padding:7px 12px; margin-bottom:8px; border-radius:10px;
+  border:1px solid var(--line); background:var(--panel); font-size:14px;
+}
+.fatigue .rnd { font-family:var(--font-mono); color:var(--muted); font-size:13px }
+.fatigue .lab { margin:0 }
+.fatigue.on { border:2px solid var(--hot); background:color-mix(in srgb, var(--hot) 8%, var(--panel)) }
+.fatigue .warn { color:var(--hot); font-weight:700 }
+
+/* ---- 게임 종료 창 ---- */
+.modal {
+  position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:16px;
+  background:rgba(0,0,0,.55);
+}
+.modal[hidden], .toast[hidden] { display:none }
+.modal-card {
+  background:var(--panel); color:var(--ink); border-radius:16px; padding:26px 30px 22px;
+  width:min(420px,100%); text-align:center; border:3px solid var(--line);
+  box-shadow:0 20px 50px rgba(0,0,0,.4); animation:modal-in .35s ease;
+}
+.modal-card.win { border-color:#e2b93b }
+.modal-card.lose { border-color:var(--hot) }
+.modal-icon { font-size:52px; line-height:1 }
+.modal-card h2 { font-family:var(--font-display); font-size:32px; margin:10px 0 4px }
+.modal-card.win h2 { color:#c99a12 }
+.modal-card.lose h2 { color:var(--hot) }
+.modal-card p { margin:0; color:var(--muted); font-size:14px }
+@keyframes modal-in { from { transform:scale(.85); opacity:0 } to { transform:scale(1); opacity:1 } }
+@media (prefers-reduced-motion:reduce) {
+  .hl.on { animation:none; opacity:.55 }
+  .modal-card { animation:none }
 }

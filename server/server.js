@@ -7,6 +7,8 @@
  *   - 판정은 전적으로 서버가 한다. 브라우저는 "이렇게 두고 싶다"만 보낸다.
  *   - 서버는 바뀐 상태를 SSE(EventSource)로 밀어 준다. 폴링도 웹소켓도 필요 없다.
  *   - 자원 종류는 본인에게만 보낸다 (규칙서 12장). 남의 것은 장수만 간다.
+ *   - 2인전도 된다. 새 게임을 시작할 때 인원을 고르거나, `PLAYERS=2` 로 띄운다.
+ *     2인전은 P1(f11)·P2(a1)만 앉고, P3 본진(l1) 쪽은 빈 땅으로 남는다.
  */
 'use strict';
 
@@ -24,6 +26,7 @@ require(path.join(root, 'js/game.js'));
 const R = global.window.GameRules;
 
 const PORT = Number(process.env.PORT) || 8080;
+let playerCount = Number(process.env.PLAYERS) === 2 ? 2 : 3;
 
 // ---- 방 -------------------------------------------------------------------
 
@@ -37,14 +40,25 @@ function seatOf(token) {
   return i < 0 ? null : i;
 }
 
-function newGame() {
-  game = new R.Game({ useTimer: true, onChange: broadcast });
-  log('새 게임을 시작했습니다.');
+/** 이번 판에 쓰는 자리 번호 — 2인전이면 [0, 1] */
+const activeSeats = () => [0, 1, 2].slice(0, playerCount);
+
+function newGame(count) {
+  if (count === 2 || count === 3) playerCount = count;
+  // 인원을 줄이면 남는 자리에 앉아 있던 사람은 관전으로 돌아간다
+  for (let i = playerCount; i < seats.length; i++) {
+    if (seats[i]) log('P' + (i + 1) + ' (' + names[i] + ') 는 ' + playerCount + '인전이라 관전으로 바뀝니다.');
+    seats[i] = null;
+    names[i] = null;
+  }
+  game = new R.Game({ useTimer: true, onChange: broadcast, seats: activeSeats() });
+  log(playerCount + '인전 새 게임을 시작했습니다.');
 }
 
 function roomState() {
   return {
-    seats: seats.map((t, i) => ({ seat: i, taken: !!t, name: names[i] })),
+    players: playerCount,
+    seats: activeSeats().map(i => ({ seat: i, taken: !!seats[i], name: names[i] })),
     watching: clients.length,
   };
 }
@@ -151,8 +165,8 @@ const server = http.createServer((req, res) => {
       let token = body.token;
       let seat = token ? seatOf(token) : null;
       if (seat === null) {
-        seat = seats.indexOf(null);
-        if (seat < 0) {                                  // 세 자리가 다 찼으면 관전
+        seat = activeSeats().find(i => !seats[i]);
+        if (seat === undefined) {                        // 자리가 다 찼으면 관전
           return sendJson(res, { ok: true, token: token || crypto.randomUUID(), seat: null, room: roomState() });
         }
         token = token || crypto.randomUUID();
@@ -204,9 +218,9 @@ const server = http.createServer((req, res) => {
       if (!body || seatOf(body.token) === null) {
         return sendJson(res, { ok: false, message: '앉아 있는 사람만 새 게임을 시작할 수 있습니다.' }, 403);
       }
-      newGame();
+      newGame(Number(body.players));
       broadcast();
-      return sendJson(res, { ok: true });
+      return sendJson(res, { ok: true, players: playerCount });
     });
   }
 
@@ -240,6 +254,7 @@ server.listen(PORT, () => {
   console.log('\n카탄 증강 체스 서버가 떴습니다.\n');
   console.log('  이 컴퓨터     http://localhost:' + PORT);
   addrs.forEach(a => console.log('  같은 와이파이 http://' + a + ':' + PORT));
-  console.log('\n다른 컴퓨터에서 위 주소를 열면 빈 자리에 앉습니다. 세 자리가 차면 관전이 됩니다.');
+  console.log('\n지금은 ' + playerCount + '인전입니다. 다른 컴퓨터에서 위 주소를 열면 빈 자리에 앉고, 자리가 차면 관전이 됩니다.');
+  console.log('인원은 화면의 "다시 시작" 옆에서 2인·3인을 골라 바꿀 수 있습니다.');
   console.log('멈추려면 Ctrl+C.\n');
 });

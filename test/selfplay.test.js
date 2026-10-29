@@ -11,9 +11,9 @@ const B = window.Board, P = window.Pieces, G = window.GameRules;
 
 function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-function playOne(seed, verbose) {
+function playOne(seed, seats) {
   const rng = mulberry(seed);
-  const g = new G.Game({ rng, useTimer: false });
+  const g = new G.Game({ rng, useTimer: false, seats });
   const pick = arr => arr[Math.floor(rng() * arr.length)];
   let guard = 0;
 
@@ -85,6 +85,7 @@ function playOne(seed, verbose) {
     for (const [id, pc] of g.pieces) {
       if (!B.cells[id]) throw new Error('판 밖 기물 ' + id);
       if (!g.player(pc.owner).alive) throw new Error('탈락자 기물 남음 ' + id);
+      if (g.player(pc.owner).absent) throw new Error('불참 자리 기물 ' + id);
       if (g.owners[id] !== pc.owner) throw new Error('기물이 선 칸의 점령자 불일치 ' + id);
     }
     g.players.forEach(p => {
@@ -114,4 +115,15 @@ rounds.sort((a, b) => a - b);
 console.log('300판 완주, 불변식 위반 없음.');
 console.log('  킹 사살로 끝난 판', kills, '· 32라운드까지 간 판', timeouts);
 console.log('  라운드 중앙값', rounds[150], '최소', rounds[0], '최대', rounds[299]);
+
+// 2인전: P1·P2 만 두고, P3 는 한 번도 차례가 오지 않아야 한다
+let duelKills = 0;
+for (let s = 1; s <= 150; s++) {
+  const g = playOne(10000 + s, [0, 1]);
+  if (g.player(2).alive || !g.player(2).absent) throw new Error('2인전에서 P3 가 살아 있음');
+  if (g.log.some(e => /^P3 /.test(e.text))) throw new Error('2인전에서 P3 가 두었음');
+  if (g.winners.some(i => i === 2)) throw new Error('2인전에서 P3 승리');
+  if (/마지막까지/.test(g.log[g.log.length - 1].text)) duelKills++;
+}
+console.log('2인전 150판 완주, P3 개입 없음. 킹 사살로 끝난 판', duelKills);
 console.log('\nPASS');

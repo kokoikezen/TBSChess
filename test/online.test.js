@@ -119,6 +119,7 @@ async function until(fn, what) {
       .applySnapshot(latest[seat]);
     const pick = a => a[Math.floor(Math.random() * a.length)];
 
+    async function playToEnd() {
     let steps = 0, summons = 0, moves = 0, pawns = 0, discards = 0, robbers = 0, trades = 0;
     while (latest[0].phase !== 'gameover') {
       if (steps++ > 4000) throw new Error('판이 끝나지 않습니다');
@@ -185,10 +186,11 @@ async function until(fn, what) {
       if (!r.ok) throw new Error(type + ' 거부됨: ' + r.message);
       await until(() => latest[0] !== before, type + ' 반영');
     }
+    return steps + '수: 소환 ' + summons + ' 이동 ' + moves + ' 교역 ' + trades
+      + ' 버리기 ' + discards + ' 도둑 ' + robbers + ' 폰귀환 ' + pawns;
+    }
 
-    check(true, '세 대가 한 판을 끝까지 두었다 (' + steps + '수: 소환 ' + summons
-      + ' 이동 ' + moves + ' 교역 ' + trades + ' 버리기 ' + discards
-      + ' 도둑 ' + robbers + ' 폰귀환 ' + pawns + ')');
+    check(true, '세 대가 한 판을 끝까지 두었다 (' + await playToEnd() + ')');
 
     const fin = latest[0];
     check(Array.isArray(fin.winners) && fin.winners.length >= 1, '승자가 정해졌다: '
@@ -205,6 +207,29 @@ async function until(fn, what) {
     check(latest[2].round === 1, '모두의 화면이 새 판으로 바뀐다');
     const badReset = await post('/reset', { token: '없는토큰' });
     check(!badReset.ok, '관전자는 새 게임을 시작할 수 없다');
+
+    // ---- 2인전 ----
+    let room = null;
+    views.push(await listen(tokens[0], msg => { room = msg.room; }));
+    const duel = await post('/reset', { token: tokens[1], players: 2 });
+    check(duel.ok && duel.players === 2, '새 게임을 2인전으로 시작할 수 있다');
+    await until(() => latest[0].seats && latest[0].seats.length === 2 && room && room.players === 2, '2인전 전파');
+    check(latest[0].players[2].absent && !latest[0].players[2].alive, '2인전에서 P3 자리는 불참으로 비어 있다');
+    check(!latest[0].pieces.some(([, owner]) => owner === 2), 'P3 본진(l1)에는 킹이 놓이지 않는다');
+    const kicked = await post('/join', { token: tokens[2] });
+    check(kicked.seat === null, '3인전 때 P3 였던 사람은 관전으로 바뀐다');
+    const third = await post('/join', { name: '늦게 온 사람' });
+    check(third.seat === null && room.seats.length === 2, '2인전에서는 세 번째 접속자가 관전이 된다');
+    const p3act = await post('/action', { token: tokens[2], type: 'roll', args: [] });
+    check(!p3act.ok, '관전으로 바뀐 사람은 둘 수 없다');
+
+    const duelLog = await playToEnd();
+    check(latest[0].winners.every(i => i !== 2) && !latest[0].log.some(e => /^P3 /.test(e.text)),
+      '두 대가 2인전 한 판을 끝까지 두었다 (' + duelLog + ')');
+    check(latest[1].phase === 'gameover', '두 화면 모두 같은 결과를 본다');
+
+    const back = await post('/reset', { token: tokens[0], players: 3 });
+    check(back.ok && back.players === 3, '다시 3인전으로 돌릴 수 있다');
 
     views.forEach(req => req.destroy());
     console.log('\nPASS ' + pass + '개 확인');

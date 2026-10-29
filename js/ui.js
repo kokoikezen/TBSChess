@@ -458,7 +458,7 @@
     renderPlayers() {
       const g = this.game;
       $('players').innerHTML = '<tr><th>진영</th><th>자원</th><th>점령</th><th>기물</th><th>상태</th></tr>'
-        + g.players.map(p => {
+        + g.players.filter(p => !p.absent).map(p => {
           const st = !p.alive ? p.eliminatedRound + '라운드 탈락'
             : (g.inCheck(p.index) ? '체크' : (g.winners && g.winners.indexOf(p.index) >= 0 ? '승리' : '—'));
           return '<tr class="' + (p.alive ? '' : 'off') + '">'
@@ -559,9 +559,14 @@
       };
       $('timer').setAttribute('aria-pressed', g.useTimer);
       $('restart').onclick = () => {
-        if (!confirm('새 게임을 시작할까요?')) return;
-        if (global.Net && global.Net.token) global.Net.reset();   // 온라인은 모두에게 적용
-        else location.reload();
+        const count = +$('pcount').value;
+        if (!confirm(count + '인전으로 새 게임을 시작할까요?')) return;
+        if (global.Net && global.Net.token) global.Net.reset(count);   // 온라인은 모두에게 적용
+        else {
+          const url = new URL(location.href);
+          if (count === 2) url.searchParams.set('players', '2'); else url.searchParams.delete('players');
+          location.href = url.toString();
+        }
       };
     }
   }

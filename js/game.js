@@ -37,6 +37,8 @@
       // 이 쪽에서 조작해도 되는 자리. 핫시트는 세 자리 모두, 온라인은 내 자리 하나.
       this.controls = opts.controls || [0, 1, 2];
       this.viewer = opts.viewer === undefined ? null : opts.viewer;
+      // 이번 판에 참가하는 자리. 2인전은 [0, 1] — 빠진 자리는 처음부터 판에 없다.
+      this.seats = (opts.seats || [0, 1, 2]).slice().sort();
 
       this.owners = {};                 // 칸id -> 플레이어 인덱스 (점령, 규칙서 7장)
       this.pieces = new Map();          // 칸id -> {owner, type}
@@ -44,13 +46,14 @@
         index: i,
         home: B.HOMES[i],
         hand: emptyHand(),
-        alive: true,
+        alive: this.seats.indexOf(i) >= 0,
+        absent: this.seats.indexOf(i) < 0,
         eliminatedRound: null,
       }));
 
       this.robber = null;               // 도둑은 판 밖에서 시작
       this.round = 1;
-      this.current = 0;
+      this.current = this.seats[0];
       this.turnStarts = 0;              // 이번 라운드에 턴을 시작한 생존 플레이어 수
       this.dice = null;
       this.actionUsed = false;
@@ -65,18 +68,19 @@
       this.lastError = null;
 
       // 킹을 본진에 놓는다 (규칙서 4장). 본진 칸도 점령 표시가 된다.
-      this.players.forEach(p => {
+      this.alivePlayers().forEach(p => {
         this.pieces.set(p.home, { owner: p.index, type: 'K' });
         this.owners[p.home] = p.index;
       });
       // 세 진영의 2칸 범위는 겹치지 않으므로 순서는 중요하지 않다.
-      [0, 1, 2].forEach(i => {
+      this.seats.forEach(i => {
         this.setupQueue.push(
           { player: i, type: 'P' },
           { player: i, type: 'P' },
           { player: i, type: 'N' });
       });
-      this.say('플레이어 1부터 킹 주변 2칸에 폰 2개와 나이트 1개를 공짜로 놓습니다.');
+      if (this.seats.length < 3) this.say(this.seats.length + '인전: ' + this.seats.map(i => 'P' + (i + 1)).join(' · ') + '만 참가합니다.');
+      this.say('P' + (this.seats[0] + 1) + '부터 킹 주변 2칸에 폰 2개와 나이트 1개를 공짜로 놓습니다.');
     }
 
     // ---- 기본 조회 -------------------------------------------------------
@@ -263,10 +267,10 @@
       this.setupQueue.shift();
       if (!this.setupQueue.length) {
         this.phase = 'roll';
-        this.current = 0;
+        this.current = this.seats[0];
         this.turnStarts = 1;
         this.startTimer();
-        this.say('— 1라운드 시작. P1 차례입니다.');
+        this.say('— 1라운드 시작. P' + (this.current + 1) + ' 차례입니다.');
       } else {
         this.current = this.setupQueue[0].player;
       }
@@ -630,9 +634,11 @@
             hand: mine ? Object.assign({}, p.hand) : null,
             count: handSize(p.hand),
             alive: p.alive,
+            absent: !!p.absent,
             eliminatedRound: p.eliminatedRound,
           };
         }),
+        seats: this.seats.slice(),
         robber: this.robber,
         round: this.round,
         current: this.current,
@@ -661,8 +667,10 @@
         mine.hidden = !p.hand;             // 가려진 손패는 장수만 믿는다
         mine.hiddenCount = p.count;
         mine.alive = p.alive;
+        mine.absent = !!p.absent;
         mine.eliminatedRound = p.eliminatedRound;
       });
+      if (s.seats) this.seats = s.seats.slice();
       this.robber = s.robber;
       this.round = s.round;
       this.current = s.current;

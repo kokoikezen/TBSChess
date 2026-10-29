@@ -66,6 +66,8 @@
       }
       this.game.controls = this.seat === null ? [] : [this.seat];
       this.game.applySnapshot(state);
+      const pc = document.getElementById('pcount');
+      if (pc && this.room && document.activeElement !== pc) pc.value = String(this.room.players);
       this.ui.render();
       this.status('');
     },
@@ -106,8 +108,10 @@
       }
     },
 
-    async reset() {
-      await this.post('/reset', { token: this.token });
+    /** 새 게임. players 는 2 또는 3 — 방 전체의 인원이 바뀐다. */
+    async reset(players) {
+      const r = await this.post('/reset', { token: this.token, players });
+      if (r && !r.ok && this.ui) { this.ui.message = r.message; this.ui.render(); }
     },
 
     status(text) {
@@ -115,7 +119,8 @@
       if (!el) return;
       const seat = this.seat === null ? '관전' : 'P' + (this.seat + 1);
       const sitting = this.room ? this.room.seats.filter(s => s.taken).length : 0;
-      el.textContent = text || (seat + ' · 접속 ' + sitting + '/3');
+      const total = this.room ? this.room.players : 3;
+      el.textContent = text || (seat + ' · ' + total + '인전 · 접속 ' + sitting + '/' + total);
       el.classList.toggle('on', !!text || !this.connected);
     },
 

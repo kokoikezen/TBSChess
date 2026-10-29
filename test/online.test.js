@@ -128,7 +128,7 @@ async function until(fn, what) {
 
       if (s.phase === 'setup') { actor = s.setupQueue[0].player; type = 'place'; }
       else if (s.phase === 'discard') { actor = s.pendingDiscards[0].player; type = 'discard'; }
-      else if (s.pendingPawnReturn) { actor = s.pendingPawnReturn.player; type = 'choosePawnReward'; }
+      else if (s.pendingPromotion) { actor = s.pendingPromotion.player; type = 'choosePromotion'; }
       else if (s.phase === 'robber') { actor = s.current; type = 'moveRobber'; }
       else if (s.phase === 'roll') { actor = s.current; type = 'roll'; }
       else { actor = s.current; type = 'action'; }
@@ -147,7 +147,7 @@ async function until(fn, what) {
       } else if (type === 'moveRobber') {
         args = [pick(B.order.filter(id => id !== g.robber && B.cells[id].terrain !== 'S'))];
         robbers++;
-      } else if (type === 'choosePawnReward') { args = [pick(B.RESOURCES)]; pawns++; }
+      } else if (type === 'choosePromotion') { args = [pick(g.promotionChoices(actor))]; pawns++; }
       else {
         // 행위 단계: 가끔 은행 교역, 그 다음 소환 아니면 이동
         if (Math.random() < 0.2) {
@@ -187,7 +187,7 @@ async function until(fn, what) {
       await until(() => latest[0] !== before, type + ' 반영');
     }
     return steps + '수: 소환 ' + summons + ' 이동 ' + moves + ' 교역 ' + trades
-      + ' 버리기 ' + discards + ' 도둑 ' + robbers + ' 폰귀환 ' + pawns;
+      + ' 버리기 ' + discards + ' 도둑 ' + robbers + ' 승급 ' + pawns;
     }
 
     check(true, '세 대가 한 판을 끝까지 두었다 (' + await playToEnd() + ')');

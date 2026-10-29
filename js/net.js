@@ -76,7 +76,7 @@
     wrap(game) {
       const self = this;
       const actions = ['place', 'roll', 'discard', 'moveRobber', 'tradeBank', 'proposeTrade',
-        'respondTrade', 'summon', 'move', 'choosePawnReward', 'timeout'];
+        'respondTrade', 'summon', 'move', 'choosePromotion', 'timeout'];
       actions.forEach(type => {
         game[type] = function () {
           const args = Array.prototype.slice.call(arguments);

@@ -29,11 +29,12 @@
   <div class="layout">
     <section class="boardbox">
       <svg id="board" role="img" aria-label="카탄 증강 체스 육각 보드"></svg>
+      <div class="toast" id="toast" role="status" aria-live="assertive" hidden></div>
       <div class="banner" id="banner"></div>
     </section>
 
     <aside>
-      <div class="card">
+      <div class="card" id="turncard">
         <h2 id="turn"></h2>
         <div class="phase" id="phase"></div>
         <div class="dice" id="dice"></div>
@@ -113,7 +114,8 @@
           <li>7: 8장 이상이면 절반 버리기 → 도둑 이동·약탈 → f6 생산.</li>
           <li>점령은 마지막으로 밟은 사람의 것. 기물이 떠나도 유지. 본진은 생산 없음.</li>
           <li>잡으면 약탈 1장. 킹을 잡으면 그 플레이어 탈락, 자원 절반을 가져갑니다.</li>
-          <li>폰이 전진 방향 판 끝에 닿으면 판에서 빠지고 원하는 자원 2장.</li>
+          <li>폰은 앞 · 오른쪽 대각선 · 왼쪽 대각선 1칸으로 가고, 같은 칸으로 잡습니다.</li>
+          <li>폰이 전진 방향 판 끝에 닿으면 퀸 · 룩 · 비숍 · 나이트 중 하나로 승급합니다 (퀸은 1개까지).</li>
           <li>킹은 변이 맞닿은 주변 6칸으로만 1칸 — 킹이 갈 수 있는 곳이 곧 소환할 수 있는 곳입니다.</li>
           <li>체크를 받으면 거는 기물과 내 킹이 붉은 아우라로 이어집니다.</li>
           <li>17라운드부터 소환 +1, 27라운드부터 소환 불가, 32라운드 종료 시 점령 수로 판정.</li>

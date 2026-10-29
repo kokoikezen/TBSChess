@@ -44,7 +44,7 @@ header .sub { color:var(--muted); font-size:13.5px }
 @media (max-width:980px) { .layout { grid-template-columns:1fr } }
 
 /* ---- 보드 ---- */
-.boardbox { min-width:0 }
+.boardbox { min-width:0; position:relative }
 #board { width:100%; height:auto; display:block; touch-action:manipulation }
 .hex { stroke:var(--bg); stroke-width:2.2; transition:opacity .12s }
 .hex.click { cursor:pointer }
@@ -182,4 +182,44 @@ select {
 @keyframes aura-dash { to { stroke-dashoffset:-22 } }
 @media (prefers-reduced-motion:reduce) {
   .aura, .aura-line { animation:none; opacity:.85 }
+}
+
+/* ---- 내 차례 알림 ----
+   차례가 넘어오거나 7·도둑·승급처럼 꼭 골라야 할 때 보드 위에 잠깐 크게 띄우고,
+   차례 카드와 안내줄을 내 진영 색으로 칠한다. */
+.toast {
+  position:absolute; left:50%; top:38%; transform:translate(-50%,-50%) scale(.9); opacity:0;
+  padding:14px 22px; border-radius:14px; font-size:clamp(16px,2.4vw,22px); font-weight:600;
+  background:var(--panel); color:var(--ink); border:3px solid var(--me, var(--ink));
+  box-shadow:0 10px 30px rgba(0,0,0,.25); pointer-events:none; text-align:center;
+  max-width:calc(100% - 32px); z-index:5;
+}
+.toast.danger { border-color:var(--hot); color:var(--hot) }
+.toast.show { animation:toast-in 2.6s ease forwards }
+.toast.danger.show { animation-duration:3.6s }
+@keyframes toast-in {
+  0% { opacity:0; transform:translate(-50%,-50%) scale(.85) }
+  10%, 80% { opacity:1; transform:translate(-50%,-50%) scale(1) }
+  100% { opacity:0; transform:translate(-50%,-50%) scale(1) }
+}
+#turncard.myturn { border:2px solid var(--me); box-shadow:0 0 0 4px color-mix(in srgb, var(--me) 22%, transparent) }
+#turncard.myturn h2::after {
+  content:'내 차례'; font-family:var(--font-body); font-size:12px; font-weight:600;
+  color:#fff; background:var(--me); padding:2px 9px; border-radius:999px;
+}
+.banner.mine { border:2px solid var(--me) }
+.banner.alert {
+  border:2px solid var(--hot); background:color-mix(in srgb, var(--hot) 10%, var(--panel));
+  animation:banner-pulse 1.4s ease-in-out infinite;
+}
+@keyframes banner-pulse {
+  0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--hot) 35%, transparent) }
+  50% { box-shadow:0 0 0 6px transparent }
+}
+.ring.pulse { animation:ring-pulse 1.2s ease-in-out infinite }
+@keyframes ring-pulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+tr.cur td { font-weight:600 }
+@media (prefers-reduced-motion:reduce) {
+  .toast.show, .banner.alert, .ring.pulse { animation:none }
+  .toast.show { opacity:1; transform:translate(-50%,-50%) }
 }

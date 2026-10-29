@@ -44,6 +44,8 @@
       this.extraPicks = [];     // 추가 비용으로 낼 자원
       this.message = '';
       this.nodes = {};
+      this.lastAttention = null;  // 마지막으로 알린 "내가 할 일" — 바뀔 때만 다시 알린다
+      this.baseTitle = document.title;
       this.buildBoard();
       this.bindPanels();
       game.onChange = () => this.render();
@@ -147,7 +149,7 @@
       if (!this.myMove()) return this.render();
       if (g.phase === 'setup') return this.report(g.place(id));
       if (g.phase === 'robber') return this.report(g.moveRobber(id));
-      if (g.phase !== 'action' || g.actionUsed || g.pendingPawnReturn) return this.render();
+      if (g.phase !== 'action' || g.actionUsed || g.pendingPromotion) return this.render();
 
       if (this.summonType) {
         if (this.targets().indexOf(id) >= 0) {
@@ -175,7 +177,7 @@
       const g = this.game;
       if (g.phase === 'setup') return !!g.setupJob() && g.canAct(g.setupJob().player);
       if (g.phase === 'discard') return !!g.discardJob() && g.canAct(g.discardJob().player);
-      if (g.pendingPawnReturn) return g.canAct(g.pendingPawnReturn.player);
+      if (g.pendingPromotion) return g.canAct(g.pendingPromotion.player);
       if (g.phase === 'gameover') return false;
       return g.canAct(g.current);
     }
@@ -225,14 +227,19 @@
         n.robber.textContent = g.robber === id ? '🦝' : '';
 
         let ring = 'none', dash = 'none';
-        if (targets.has(id)) { ring = captures.has(id) ? 'var(--hot)' : 'var(--ink)'; dash = captures.has(id) ? 'none' : '5 4'; }
+        const robberTarget = g.phase === 'robber' && targets.has(id);
+        const promoting = !!g.pendingPromotion && g.pendingPromotion.at === id;
+        if (robberTarget) { ring = 'var(--hot)'; dash = '4 4'; }
+        else if (targets.has(id)) { ring = captures.has(id) ? 'var(--hot)' : 'var(--ink)'; dash = captures.has(id) ? 'none' : '5 4'; }
+        else if (promoting) ring = 'var(' + PCOL[g.pendingPromotion.player] + ')';
         else if (id === myKing && mine) ring = 'var(--hot)';
         n.ring.setAttribute('stroke', ring);
         n.ring.setAttribute('stroke-dasharray', dash);
+        n.ring.classList.toggle('pulse', robberTarget || promoting);
 
         n.hex.classList.toggle('sel', id === this.sel);
         const clickable = this.myMove() && (g.phase === 'setup' || g.phase === 'robber'
-          || (g.phase === 'action' && !g.actionUsed && !g.pendingPawnReturn));
+          || (g.phase === 'action' && !g.actionUsed && !g.pendingPromotion));
         n.hex.classList.toggle('click', clickable);
       }
 
@@ -244,6 +251,101 @@
       this.renderPlayers();
       this.renderLog();
       this.renderBanner();
+      this.renderAttention();
+    }
+
+    // ---- 내 차례 알림 ----------------------------------------------------
+
+    /** 핫시트(한 기기에서 여럿이)인가 */
+    hotseat() { return this.game.viewer === null && this.game.controls.length > 1; }
+
+    /** 지금 무언가를 골라야 하는 자리 */
+    actor() {
+      const g = this.game;
+      if (g.phase === 'setup' && g.setupJob()) return g.setupJob().player;
+      if (g.phase === 'discard' && g.discardJob()) return g.discardJob().player;
+      if (g.pendingPromotion) return g.pendingPromotion.player;
+      return g.current;
+    }
+
+    /** 지금 내가 꼭 해야 하는 일. key 가 바뀌는 순간에만 알림을 띄운다
+     *  (같은 턴 안에서 주사위 → 행위로 넘어갈 때는 다시 알리지 않는다). */
+    attention() {
+      const g = this.game;
+      if (g.phase === 'gameover') return null;
+      const name = i => (this.hotseat() ? 'P' + (i + 1) + ' — ' : '');
+      if (g.offer && g.canAct(g.offer.to) && !this.hotseat()) {
+        return { key: 'offer:' + g.log.length, kind: 'info', text: 'P' + (g.offer.from + 1) + '이 교역을 제안했습니다' };
+      }
+      if (!this.myMove()) return null;
+      const turn = g.round + ':' + g.current;
+      const who = this.actor();
+      if (g.phase === 'setup') {
+        return { key: 'setup:' + who, kind: 'turn', text: name(who) + '내 차례! 킹 주변에 기물을 놓으세요' };
+      }
+      if (g.phase === 'discard') {
+        return { key: 'discard:' + turn + ':' + who, kind: 'danger',
+          text: name(who) + '7이 나왔습니다! 자원 ' + g.discardJob().count + '장을 버리세요' };
+      }
+      if (g.phase === 'robber') {
+        return { key: 'robber:' + turn, kind: 'danger', text: name(who) + '🦝 7! 도둑을 옮길 칸을 고르세요' };
+      }
+      if (g.pendingPromotion) {
+        return { key: 'promo:' + turn, kind: 'turn', text: name(who) + '폰 승급! 바꿀 기물을 고르세요' };
+      }
+      return { key: 'turn:' + turn, kind: 'turn', text: name(who) + '내 차례입니다! 주사위를 굴리세요' };
+    }
+
+    renderAttention() {
+      const g = this.game;
+      const urgent = this.myMove() && g.phase !== 'gameover';
+      const card = $('turncard');
+      card.classList.toggle('myturn', urgent);
+      card.style.setProperty('--me', 'var(' + PCOL[this.actor()] + ')');
+      if (!this.hotseat()) document.title = (urgent ? '● 내 차례 — ' : '') + this.baseTitle;
+
+      const att = this.attention();
+      const key = att ? att.key : null;
+      if (key === this.lastAttention) return;
+      this.lastAttention = key;
+      if (!att) return;
+      this.toast(att.text, att.kind);
+      if (!this.hotseat()) this.beep(att.kind);
+    }
+
+    toast(text, kind) {
+      const t = $('toast');
+      if (!t) return;
+      t.textContent = text;
+      t.className = 'toast ' + (kind || 'turn');
+      t.style.setProperty('--me', 'var(' + PCOL[this.actor()] + ')');
+      t.hidden = false;
+      void t.offsetWidth;                 // 애니메이션을 처음부터 다시
+      t.classList.add('show');
+      clearTimeout(this.toastTimer);
+      this.toastTimer = setTimeout(() => { t.classList.remove('show'); t.hidden = true; },
+        kind === 'danger' ? 3600 : 2600);
+    }
+
+    /** 짧은 알림음. 브라우저가 소리를 막아 두었으면(아직 아무것도 안 눌렀으면) 조용히 넘어간다. */
+    beep(kind) {
+      try {
+        const Ctx = global.AudioContext || global.webkitAudioContext;
+        if (!Ctx) return;
+        this.audio = this.audio || new Ctx();
+        const ctx = this.audio;
+        const notes = kind === 'danger' ? [660, 440, 660] : [523, 784];
+        notes.forEach((f, k) => {
+          const o = ctx.createOscillator(), gain = ctx.createGain();
+          const at = ctx.currentTime + k * 0.16;
+          o.frequency.value = f;
+          gain.gain.setValueAtTime(0.0001, at);
+          gain.gain.exponentialRampToValueAtTime(0.18, at + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
+          o.connect(gain).connect(ctx.destination);
+          o.start(at); o.stop(at + 0.15);
+        });
+      } catch (e) { /* 소리는 덤이다 */ }
     }
 
     /** 지금 체크를 받고 있는 킹과, 체크를 거는 기물들.
@@ -311,7 +413,7 @@
         ? '<span class="die">' + d[0] + '</span><span class="die">' + d[1] + '</span><span class="sum">= ' + (d[0] + d[1]) + '</span>'
         : '<span class="sum">아직 굴리지 않았습니다</span>';
       $('roll').disabled = g.phase !== 'roll' || !g.canAct(g.current);
-      $('pass').disabled = !(g.phase === 'action' && !g.pendingPawnReturn && g.canAct(g.current));
+      $('pass').disabled = !(g.phase === 'action' && !g.pendingPromotion && g.canAct(g.current));
     }
 
     clockText() {
@@ -354,7 +456,7 @@
       const g = this.game;
       const i = g.current;
       const sc = g.surcharge(i);
-      const open = g.phase === 'action' && !g.actionUsed && !g.pendingPawnReturn;
+      const open = g.phase === 'action' && !g.actionUsed && !g.pendingPromotion;
 
       $('surcharge').textContent = g.summonBlocked()
         ? '전쟁 피로: 소환 불가'
@@ -412,7 +514,7 @@
 
     renderTrade() {
       const g = this.game;
-      const open = g.canTrade() && !g.pendingPawnReturn;
+      const open = g.canTrade() && !g.pendingPromotion;
       $('tradecard').hidden = g.phase === 'setup' || g.phase === 'gameover';
 
       // 은행 4:1
@@ -461,8 +563,10 @@
         + g.players.filter(p => !p.absent).map(p => {
           const st = !p.alive ? p.eliminatedRound + '라운드 탈락'
             : (g.inCheck(p.index) ? '체크' : (g.winners && g.winners.indexOf(p.index) >= 0 ? '승리' : '—'));
-          return '<tr class="' + (p.alive ? '' : 'off') + '">'
-            + '<td><span class="pdot" style="background:var(' + PCOL[p.index] + ')"></span>P' + (p.index + 1) + '</td>'
+          const cur = g.phase !== 'gameover' && p.index === g.current;
+          return '<tr class="' + (p.alive ? '' : 'off') + (cur ? ' cur' : '') + '">'
+            + '<td><span class="pdot" style="background:var(' + PCOL[p.index] + ')"></span>P' + (p.index + 1)
+            + (g.viewer === p.index ? ' (나)' : '') + (cur ? ' ◀ 차례' : '') + '</td>'
             + '<td>' + R.handSize(p.hand) + '</td>'
             + '<td>' + g.ownedCells(p.index).length + '</td>'
             + '<td>' + g.materialOf(p.index) + '</td>'
@@ -486,11 +590,13 @@
       if (g.phase === 'gameover') {
         bar.innerHTML = '<b>' + g.winners.map(i => 'P' + (i + 1)).join(' · ')
           + ' 승리!</b> 새 게임을 시작하려면 다시 시작을 누르세요.';
-      } else if (g.pendingPawnReturn) {
-        bar.innerHTML = note + '<b>폰 귀환</b> — 받을 자원을 고르세요 ('
-          + g.pendingPawnReturn.remaining + '장 남음): '
-          + B.RESOURCES.map(k => '<button data-k="' + k + '">' + B.RES_INFO[k].name + '</button>').join(' ');
-        wire = b => this.report(g.choosePawnReward(b.dataset.k));
+      } else if (g.pendingPromotion) {
+        const job = g.pendingPromotion;
+        const choices = g.promotionChoices(job.player);
+        bar.innerHTML = note + '<b>P' + (job.player + 1) + ' 폰 승급</b> (' + job.at + ') — 바꿀 기물을 고르세요: '
+          + P.PROMOTIONS.map(t => '<button data-k="' + t + '"' + (choices.indexOf(t) >= 0 ? '' : ' disabled') + '>'
+            + P.PIECE_INFO[t].glyph + ' ' + P.PIECE_INFO[t].name + '</button>').join(' ');
+        wire = b => this.report(g.choosePromotion(b.dataset.k));
       } else if (g.phase === 'discard') {
         const job = g.discardJob();
         // 엔진은 정확한 장수를 한 번에 받으므로, 다 고를 때까지 여기서 모아 둔다.
@@ -500,12 +606,13 @@
         const picks = this.draft.picks;
         const hand = g.player(job.player).hand;
         const chosen = B.RESOURCES.reduce((a, k) => a + picks[k], 0);
-        bar.innerHTML = note + '<b>P' + (job.player + 1) + '</b> 자원 ' + job.count + '장 버리기 ('
+        const waitingOn = this.myMove() ? '' : ' <span class="lab" style="margin:0">— P' + (job.player + 1) + '이 고르는 중입니다</span>';
+        bar.innerHTML = note + '<b>7! P' + (job.player + 1) + '</b> 자원 ' + job.count + '장 버리기 ('
           + chosen + '/' + job.count + (chosen ? ' — ' + esc(R.fmtHand(picks)) : '') + '): '
           + B.RESOURCES.map(k => '<button data-k="' + k + '"'
             + (hand[k] - picks[k] > 0 && chosen < job.count ? '' : ' disabled') + '>'
             + B.RES_INFO[k].name + '</button>').join(' ')
-          + (chosen ? ' <button data-k="reset">되돌리기</button>' : '');
+          + (chosen ? ' <button data-k="reset">되돌리기</button>' : '') + waitingOn;
         wire = b => {
           if (b.dataset.k === 'reset') { this.draft = null; this.message = ''; return this.render(); }
           picks[b.dataset.k] += 1;
@@ -524,9 +631,21 @@
               : (this.sel ? '갈 칸을 고르세요.'
                 : '기물을 눌러 이동하거나, 오른쪽에서 소환할 기물을 고르세요. 교역은 자유입니다.')),
         }[g.phase];
-        bar.innerHTML = note + (text || '');
+        // 내 차례가 아니면 누구를 기다리는지 적는다
+        const who = this.actor();
+        const wait = {
+          setup: 'P' + (who + 1) + '이 첫 기물을 놓는 중입니다.',
+          roll: 'P' + (who + 1) + ' 차례입니다. 주사위를 기다리는 중…',
+          robber: '7이 나왔습니다. P' + (who + 1) + '이 도둑을 옮기는 중입니다.',
+          action: 'P' + (who + 1) + ' 차례입니다. 행위를 기다리는 중…',
+        }[g.phase];
+        bar.innerHTML = note + ((this.myMove() ? text : wait) || '');
       }
 
+      const must = this.myMove() && (g.phase === 'discard' || g.phase === 'robber' || !!g.pendingPromotion);
+      bar.classList.toggle('alert', must);
+      bar.classList.toggle('mine', this.myMove() && !must && g.phase !== 'gameover');
+      bar.style.setProperty('--me', 'var(' + PCOL[this.actor()] + ')');
       bar.classList.toggle('err', !!this.message && !wire);
       if (wire && this.myMove()) bar.querySelectorAll('button').forEach(b => { b.onclick = () => wire(b); });
       else if (wire) bar.querySelectorAll('button').forEach(b => { b.disabled = true; });

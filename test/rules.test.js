@@ -260,29 +260,47 @@ test('체크를 막으려 소환하면 아무 자원 1장을 더 낸다', () => 
 
 // ---- 9장: 이동 ------------------------------------------------------------
 
-test('폰은 중앙 방향으로 1칸 전진하고 좌우 60도로 잡는다', () => {
+test('폰은 앞 · 오른쪽 대각선 · 왼쪽 대각선 1칸으로 가고 같은 칸으로 잡는다', () => {
   const g = bare();
-  put(g, 'a1', 1, 'P');       // P2 는 (1,1) 방향 = a1 → b2
-  eq(P.moves(g.pieces, 'a1').map(m => m.to), ['b2'], '전진');
-  put(g, 'b1', 0, 'R');
-  const tos = P.moves(g.pieces, 'a1').map(m => m.to).sort();
-  eq(tos, ['b1', 'b2'], '좌우 60도로 잡기');
-  ok(!P.moves(g.pieces, 'a1').some(m => m.to === 'b2' && m.capture), 'b2는 빈칸');
+  put(g, 'f6', 0, 'P');       // P1 은 y 감소 방향 — f6 앞은 f5, 대각선은 e5 · g5
+  eq(P.moves(g.pieces, 'f6').map(m => m.to).sort(), ['e5', 'f5', 'g5'], '빈 판에서 전방 3칸');
+  put(g, 'e5', 1, 'N');
+  put(g, 'g5', 0, 'R');
+  const ms = P.moves(g.pieces, 'f6');
+  eq(ms.map(m => m.to).sort(), ['e5', 'f5'], '아군 칸은 못 가고 상대 칸은 잡는다');
+  ok(ms.find(m => m.to === 'e5').capture, '대각선 잡기');
+  eq(P.attacks(g.pieces, 'f6').sort(), ['e5', 'f5'], '공격 칸도 같은 3칸');
+  ok(!P.moves(g.pieces, 'f6').some(m => m.to === 'f7'), '뒤로는 못 간다');
 });
 
-test('폰이 전진 방향 판 끝에 닿으면 판에서 빠지고 원하는 자원 2장', () => {
+test('폰이 판 끝에 닿으면 퀸 · 룩 · 비숍 · 나이트 중 하나로 승급한다', () => {
   const g = bare();
   put(g, 'f2', 0, 'P');       // P1 은 y 감소 방향, f2 → f1 이 판 끝
   rig(g, 2);
   g.roll();
   ok(g.move('f2', 'f1').ok, '판 끝으로 전진');
-  ok(!g.pieces.has('f1'), '폰은 판에서 빠진다');
-  eq(g.owners['f1'], 0, '밟은 칸은 점령된 채로 남는다');
-  eq(g.current, 0, '보상을 고르기 전에는 턴이 넘어가지 않는다');
-  g.choosePawnReward('M');
-  g.choosePawnReward('I');
-  eq(g.player(0).hand, { F: 0, W: 0, I: 1, M: 1 }, '자원 2장');
-  eq(g.current, 1, '보상을 다 고르면 턴 종료');
+  eq(g.pendingPromotion, { player: 0, at: 'f1' }, '승급 대기');
+  eq(g.current, 0, '고르기 전에는 턴이 넘어가지 않는다');
+  ok(!g.choosePromotion('K').ok, '킹으로는 승급할 수 없다');
+  ok(!g.choosePromotion('P').ok, '폰으로 남을 수는 없다');
+  ok(g.choosePromotion('R').ok, '룩으로 승급');
+  eq(g.pieces.get('f1'), { owner: 0, type: 'R' }, '그 자리에 룩');
+  eq(g.owners['f1'], 0, '칸은 점령된 채로');
+  eq(g.current, 1, '고르면 턴 종료');
+});
+
+test('퀸이 이미 있으면 퀸으로는 승급할 수 없고, 시간이 지나면 자동 승급', () => {
+  const g = bare();
+  put(g, 'f2', 0, 'P');
+  put(g, 'c3', 0, 'Q');
+  rig(g, 2);
+  g.roll();
+  g.move('f2', 'f1');
+  eq(g.promotionChoices(0), ['R', 'B', 'N'], '퀸 제외');
+  ok(!g.choosePromotion('Q').ok, '퀸 거부');
+  g.timeout();
+  eq(g.pieces.get('f1').type, 'R', '시간 초과면 남은 것 중 가장 센 기물');
+  eq(g.current, 1, '그리고 턴이 넘어간다');
 });
 
 test('기물을 잡으면 자원 1장을 약탈한다', () => {
@@ -342,7 +360,7 @@ test('체크를 풀 방법이 전혀 없으면 아무 행위나 할 수 있다',
   // g8 에 상대 나이트를 둔다. 내 폰·나이트는 어느 것도 g8 에 닿지 못하고 자원도 0장이므로
   // 이동·잡기·막기·소환 어느 쪽으로도 체크를 풀 수 없다.
   put(g, 'g8', 1, 'N');
-  ['g10', 'f10', 'e10', 'g9', 'e9'].forEach(id => put(g, id, 0, 'P'));
+  ['g10', 'f10', 'e10'].forEach(id => put(g, id, 0, 'P'));   // 킹 주변 3칸을 막는다
   put(g, 'b7', 0, 'N');
   eq(g.legalMoves('f11'), [], '킹은 갈 칸이 없다');
   eq(g.handSize(0), 0, '자원 0장');

@@ -37,8 +37,10 @@ function playOne(seed, seats) {
     } else if (g.phase === 'robber') {
       const spots = B.order.filter(id => id !== g.robber && B.cells[id].terrain !== 'S');
       const r = g.moveRobber(pick(spots)); if (!r.ok) throw new Error('robber: ' + r.message);
-    } else if (g.pendingPawnReturn) {
-      const r = g.choosePawnReward(pick(B.RESOURCES)); if (!r.ok) throw new Error('pawn: ' + r.message);
+    } else if (g.pendingPromotion) {
+      const r = g.choosePromotion(pick(g.promotionChoices(g.pendingPromotion.player)));
+      if (!r.ok) throw new Error('promotion: ' + r.message);
+      promotions++;
     } else if (g.phase === 'action') {
       // 가끔 교역, 그 다음 소환 아니면 이동
       const i = g.current, hand = g.player(i).hand;
@@ -103,7 +105,7 @@ function playOne(seed, seats) {
   return g;
 }
 
-let kills = 0, timeouts = 0, rounds = [];
+let kills = 0, timeouts = 0, rounds = [], promotions = 0;
 for (let s = 1; s <= 300; s++) {
   const g = playOne(s);
   rounds.push(g.round);
@@ -114,7 +116,7 @@ for (let s = 1; s <= 300; s++) {
 rounds.sort((a, b) => a - b);
 console.log('300판 완주, 불변식 위반 없음.');
 console.log('  킹 사살로 끝난 판', kills, '· 32라운드까지 간 판', timeouts);
-console.log('  라운드 중앙값', rounds[150], '최소', rounds[0], '최대', rounds[299]);
+console.log('  라운드 중앙값', rounds[150], '최소', rounds[0], '최대', rounds[299], '· 폰 승급', promotions + '회');
 
 // 2인전: P1·P2 만 두고, P3 는 한 번도 차례가 오지 않아야 한다
 let duelKills = 0;

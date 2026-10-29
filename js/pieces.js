@@ -32,6 +32,7 @@
   };
 
   const SUMMONABLE = ['P', 'N', 'B', 'R', 'Q'];
+  const PROMOTIONS = ['Q', 'R', 'B', 'N'];      // 폰이 판 끝에 닿으면 이 중 하나로
 
   /* 한 방향으로 막힐 때까지 미끄러진다. 상대 기물이 있는 칸은 잡고 멈춘다. */
   function slide(pieces, from, dirs, owner, out) {
@@ -58,16 +59,18 @@
     }
   }
 
-  /* 폰의 전진 방향 / 잡는 방향 — 전진 방향의 좌우 60도 칸 */
+  /* 폰의 전방 3칸 — 앞, 그리고 앞의 좌우 대각선(60도) 칸.
+   * 조정: 세 칸 모두 빈칸이면 가고, 상대 기물이 있으면 잡는다. */
   function pawnDirs(owner) {
     const i = B.PAWN_FWD_INDEX[owner];
     return {
       forward: B.EDGE_DIRS[i],
-      captures: [B.EDGE_DIRS[(i + 1) % 6], B.EDGE_DIRS[(i + 5) % 6]],
+      diagonals: [B.EDGE_DIRS[(i + 1) % 6], B.EDGE_DIRS[(i + 5) % 6]],
+      all: [B.EDGE_DIRS[i], B.EDGE_DIRS[(i + 1) % 6], B.EDGE_DIRS[(i + 5) % 6]],
     };
   }
 
-  /* 폰이 전진 방향으로 판 끝에 닿았는가 (귀환 조건) */
+  /* 폰이 전진 방향으로 판 끝에 닿았는가 (승급 조건) */
   function pawnAtEdge(owner, id) {
     return B.step(id, pawnDirs(owner).forward) === null;
   }
@@ -101,30 +104,18 @@
       case 'N':   // 다른 기물을 뛰어넘는다
         hop(pieces, from, B.KNIGHT_DIRS, owner, out);
         break;
-      case 'P': {
-        const d = pawnDirs(owner);
-        const ahead = B.step(from, d.forward);
-        if (ahead && !pieces.get(ahead)) out.push({ to: ahead, capture: null });
-        for (const dir of d.captures) {
-          const at = B.step(from, dir);
-          if (!at) continue;
-          const occupant = pieces.get(at);
-          if (occupant && occupant.owner !== owner) out.push({ to: at, capture: occupant });
-        }
+      case 'P':   // 앞 · 오른쪽 대각선 · 왼쪽 대각선 1칸
+        hop(pieces, from, pawnDirs(owner).all, owner, out);
         break;
-      }
     }
     return out;
   }
 
-  /* 그 기물이 공격하는 칸들 — 폰만 이동과 공격이 다르다. */
+  /* 그 기물이 공격하는 칸들 — 이제 폰도 갈 수 있는 칸이 곧 공격하는 칸이다. */
   function attacks(pieces, from) {
     const piece = pieces.get(from);
     if (!piece) return [];
-    if (piece.type !== 'P') return moves(pieces, from).map(m => m.to);
-    return pawnDirs(piece.owner).captures
-      .map(dir => B.step(from, dir))
-      .filter(Boolean);
+    return moves(pieces, from).map(m => m.to);
   }
 
   const findKing = (pieces, owner) => {
@@ -161,7 +152,7 @@
   }
 
   global.Pieces = {
-    TYPES, PIECE_INFO, COSTS, SUMMONABLE,
+    TYPES, PIECE_INFO, COSTS, SUMMONABLE, PROMOTIONS,
     moves, attacks, findKing, checkers, inCheck,
     withMove, withSummon, pawnDirs, pawnAtEdge,
   };

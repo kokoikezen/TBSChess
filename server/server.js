@@ -93,13 +93,13 @@ function actorFor(type) {
     case 'place': return game.setupJob() ? game.setupJob().player : null;
     case 'discard': return game.discardJob() ? game.discardJob().player : null;
     case 'respondTrade': return game.offer ? game.offer.to : null;
-    case 'choosePawnReward': return game.pendingPawnReturn ? game.pendingPawnReturn.player : null;
+    case 'choosePromotion': return game.pendingPromotion ? game.pendingPromotion.player : null;
     default: return game.current;      // roll · moveRobber · 교역 · 소환 · 이동 · 턴 넘기기
   }
 }
 
 const ALLOWED = ['place', 'roll', 'discard', 'moveRobber', 'tradeBank', 'proposeTrade',
-  'respondTrade', 'summon', 'move', 'choosePawnReward', 'timeout'];
+  'respondTrade', 'summon', 'move', 'choosePromotion', 'timeout'];
 
 function applyAction(token, type, args) {
   const seat = seatOf(token);

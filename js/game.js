@@ -60,7 +60,7 @@
       this.phase = 'setup';
       this.setupQueue = [];             // [{player, type}] 순서대로 공짜 배치
       this.pendingDiscards = [];        // [{player, count}]
-      this.pendingPawnReturn = null;    // {player, remaining} — 폰 귀환 자원 선택
+      this.pendingPromotion = null;     // {player, at} — 판 끝에 닿은 폰이 무엇이 될지
       this.offer = null;                // 진행 중인 플레이어 간 교역 제안
       this.winners = null;
       this.log = [];
@@ -475,26 +475,30 @@
         if (victim.type === 'K') this.eliminate(victim.owner, i);
       }
 
-      // 폰 귀환: 전진 방향으로 판 끝에 닿으면 판에서 빼고 자원 2장
+      // 폰 승급: 전진 방향으로 판 끝에 닿으면 퀸·룩·비숍·나이트 중 하나로 바뀐다
       if (piece.type === 'P' && P.pawnAtEdge(i, to) && this.phase !== 'gameover') {
-        this.pieces.delete(to);
-        this.pendingPawnReturn = { player: i, remaining: 2 };
-        this.say('P' + (i + 1) + ' 폰이 판 끝(' + to + ')에 닿아 귀환합니다. 자원 2장을 고르세요.');
+        this.pendingPromotion = { player: i, at: to };
+        this.say('P' + (i + 1) + ' 폰이 판 끝(' + to + ')에 닿았습니다. 승급할 기물을 고르세요.');
       }
       return this.finishAction();
     }
 
-    /** 폰 귀환 보상 선택 */
-    choosePawnReward(res) {
-      if (!this.pendingPawnReturn) return this.fail('고를 보상이 없습니다.');
-      if (B.RESOURCES.indexOf(res) < 0) return this.fail('없는 자원입니다.');
-      this.give(this.pendingPawnReturn.player, res, 1);
-      this.pendingPawnReturn.remaining -= 1;
-      this.say('폰 귀환 보상: ' + B.RES_INFO[res].name + ' 1장');
-      if (this.pendingPawnReturn.remaining <= 0) {
-        this.pendingPawnReturn = null;
-        this.advanceIfReady();
+    /** 승급할 수 있는 기물 — 퀸은 판 위 1개 제한(8장)을 그대로 따른다. */
+    promotionChoices(i) {
+      return P.PROMOTIONS.filter(t => !(t === 'Q' && this.queenOnBoard(i)));
+    }
+
+    /** 폰 승급 선택 */
+    choosePromotion(type) {
+      const job = this.pendingPromotion;
+      if (!job) return this.fail('승급할 폰이 없습니다.');
+      if (this.promotionChoices(job.player).indexOf(type) < 0) {
+        return this.fail(type === 'Q' ? '퀸은 판 위에 1개까지입니다.' : '그 기물로는 승급할 수 없습니다.');
       }
+      this.pieces.set(job.at, { owner: job.player, type });
+      this.say('P' + (job.player + 1) + ' 폰이 ' + job.at + '에서 ' + P.PIECE_INFO[type].name + '(으)로 승급했습니다.');
+      this.pendingPromotion = null;
+      this.advanceIfReady();
       return this.done();
     }
 
@@ -564,7 +568,7 @@
 
     advanceIfReady() {
       if (this.phase === 'gameover') return;
-      if (this.pendingPawnReturn) return;     // 보상을 고르기 전에는 넘기지 않는다
+      if (this.pendingPromotion) return;      // 승급할 기물을 고르기 전에는 넘기지 않는다
       this.endTurn();
     }
 
@@ -576,6 +580,10 @@
         if (this.phase !== 'action') return this.done();   // 버리기·도둑은 시간 제한 밖
       }
       if (this.phase !== 'action') return this.done();
+      if (this.pendingPromotion) {            // 고르지 못했으면 가장 센 기물로
+        this.say('P' + (this.current + 1) + ' 시간 초과 — 승급을 자동으로 고릅니다.');
+        return this.choosePromotion(this.promotionChoices(this.pendingPromotion.player)[0]);
+      }
       this.say('P' + (this.current + 1) + ' 시간 초과 — 행위 없이 턴을 넘깁니다.');
       this.endTurn();
       return this.done();
@@ -648,7 +656,7 @@
         phase: this.phase,
         setupQueue: this.setupQueue.map(j => ({ player: j.player, type: j.type })),
         pendingDiscards: this.pendingDiscards.map(d => ({ player: d.player, count: d.count })),
-        pendingPawnReturn: this.pendingPawnReturn && Object.assign({}, this.pendingPawnReturn),
+        pendingPromotion: this.pendingPromotion && Object.assign({}, this.pendingPromotion),
         offer: this.offer && JSON.parse(JSON.stringify(this.offer)),
         winners: this.winners && this.winners.slice(),
         log: this.log.slice(-120),
@@ -680,7 +688,7 @@
       this.phase = s.phase;
       this.setupQueue = s.setupQueue.map(j => ({ player: j.player, type: j.type }));
       this.pendingDiscards = s.pendingDiscards.map(d => ({ player: d.player, count: d.count }));
-      this.pendingPawnReturn = s.pendingPawnReturn ? Object.assign({}, s.pendingPawnReturn) : null;
+      this.pendingPromotion = s.pendingPromotion ? Object.assign({}, s.pendingPromotion) : null;
       this.offer = s.offer ? JSON.parse(JSON.stringify(s.offer)) : null;
       this.winners = s.winners ? s.winners.slice() : null;
       this.log = s.log.slice();

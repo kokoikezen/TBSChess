@@ -267,7 +267,7 @@ server.listen(PORT, () => {
       if (n.family === 'IPv4' && !n.internal) addrs.push(n.address);
     });
   });
-  console.log('\n카탄 증강 체스 서버가 떴습니다.\n');
+  console.log('\nTBS 체스 서버가 떴습니다.\n');
   console.log('  이 컴퓨터     http://localhost:' + PORT);
   addrs.forEach(a => console.log('  같은 와이파이 http://' + a + ':' + PORT));
   console.log('\n지금은 ' + playerCount + '인전입니다. 다른 컴퓨터에서 위 주소를 열면 빈 자리에 앉고, 자리가 차면 관전이 됩니다.');

@@ -107,7 +107,6 @@
         // 기물이 숫자 토큰을 가리므로, 기물이 서 있을 때는 아래쪽에 숫자를 작게 다시 적는다
         if (c.dice) {
           node.badge = svgEl('g', { class: 'badge' }, g);
-          svgEl('circle', { cx: X, cy: Y + HEX_R * 0.64, r: 7.2 }, node.badge);
           svgEl('text', {
             x: X, y: Y + HEX_R * 0.64 + 0.5,
             class: (c.dice === 6 || c.dice === 7 || c.dice === 8) ? 'hot' : '',
@@ -257,8 +256,9 @@
         else if (targets.has(id)) { ring = captures.has(id) ? 'var(--hot)' : 'var(--ink)'; dash = captures.has(id) ? 'none' : '5 4'; }
         else if (promoting) ring = 'var(' + PCOL[g.pendingPromotion.player] + ')';
         else if (id === myKing && mine) ring = 'var(--hot)';
-        n.ring.setAttribute('stroke', ring);
-        n.ring.setAttribute('stroke-dasharray', dash);
+        // style 로 넣어야 한다 — 속성(stroke="none")은 CSS 의 .ring 색에 져서 모든 칸에 원이 그려졌다
+        n.ring.style.stroke = ring;
+        n.ring.style.strokeDasharray = dash;
         n.ring.classList.toggle('pulse', robberTarget || promoting);
         // 갈 수 있는 칸 · 놓을 수 있는 칸은 밝은 노란색으로 반짝인다 (도둑 칸 고르기는 붉은 점선 그대로)
         n.hl.classList.toggle('on', targets.has(id) && !robberTarget);

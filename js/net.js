@@ -37,19 +37,52 @@
     listen() {
       const src = new EventSource('/events?token=' + encodeURIComponent(this.token));
       this.src = src;
+      let heard = false;
       src.onmessage = e => {
         let msg;
         try { msg = JSON.parse(e.data); } catch (err) { return; }
-        this.connected = true;
-        this.seat = msg.seat;
-        this.room = msg.room;
-        this.apply(msg.state);
+        heard = true;
+        this.receive(msg);
       };
       src.onerror = () => {
+        if (this.polling) return;
         this.connected = false;
         this.status('서버와 연결이 끊겼습니다. 다시 연결하는 중…');
         // EventSource 는 스스로 다시 붙는다. 상태는 붙는 즉시 서버가 다시 보낸다.
       };
+      // SSE 를 막는 프록시(Cloudflare 임시 터널 등)를 지나면 첫 상태가 오지 않는다 → 폴링으로 바꾼다
+      setTimeout(() => {
+        if (heard) return;
+        src.close();
+        this.startPolling();
+      }, 4000);
+    },
+
+    receive(msg) {
+      this.connected = true;
+      this.seat = msg.seat;
+      this.room = msg.room;
+      this.apply(msg.state);
+    },
+
+    startPolling() {
+      this.polling = true;
+      this.version = null;
+      const tick = () => this.poll().then(() => { this.pollTimer = setTimeout(tick, 1000); });
+      tick();
+    },
+
+    async poll() {
+      try {
+        const res = await fetch('/state?token=' + encodeURIComponent(this.token)
+          + '&since=' + (this.version === null ? '' : this.version), { cache: 'no-store' });
+        const msg = await res.json();
+        this.version = msg.version;
+        if (!msg.same) this.receive(msg);
+      } catch (e) {
+        this.connected = false;
+        this.status('서버와 연결이 끊겼습니다. 다시 연결하는 중…');
+      }
     },
 
     /** 서버 상태를 화면에 반영한다. 처음 한 번만 Game·UI 를 만든다. */
@@ -88,6 +121,7 @@
 
     async send(type, args) {
       const r = await this.post('/action', { token: this.token, type, args });
+      if (this.polling) this.poll();      // 폴링 중이면 내 수를 바로 반영
       if (r && !r.ok && this.ui) {
         this.ui.message = r.message;      // 서버가 거부한 이유를 그대로 보여 준다
         this.ui.render();

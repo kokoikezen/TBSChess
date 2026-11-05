@@ -63,7 +63,11 @@ function roomState() {
   };
 }
 
+/** 상태가 바뀔 때마다 오른다. 폴링하는 브라우저가 바뀐 게 없으면 다시 그리지 않게. */
+let version = 0;
+
 function broadcast() {
+  version++;
   const dead = [];
   clients.forEach(c => {
     const seat = seatOf(c.token);
@@ -184,10 +188,14 @@ const server = http.createServer((req, res) => {
     const token = url.searchParams.get('token') || '';
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache',
+      // no-transform: Cloudflare 터널 등 프록시가 압축하느라 스트림을 모아 두지 않게 한다
+      'Cache-Control': 'no-cache, no-transform',
+      'Content-Encoding': 'identity',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
+    if (res.socket) res.socket.setNoDelay(true);
+    res.flushHeaders();
     res.write(': 연결됨\n\n');
     const client = { res, token };
     clients.push(client);
@@ -201,6 +209,14 @@ const server = http.createServer((req, res) => {
       broadcast();
     });
     return;
+  }
+
+  // 상태 한 번 받기 — SSE 가 막힌 곳(Cloudflare 임시 터널 등)에서 폴링용
+  if (route === '/state') {
+    const seat = seatOf(url.searchParams.get('token') || '');
+    const since = url.searchParams.get('since');
+    if (since && Number(since) === version) return sendJson(res, { version, same: true });
+    return sendJson(res, { version, room: roomState(), state: game.snapshot(seat), seat });
   }
 
   // 행위 보내기

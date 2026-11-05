@@ -164,7 +164,7 @@ async function until(fn, what) {
         if (can.length && Math.random() < 0.45) {
           const t = pick(can);
           const spare = Object.assign({}, g.player(actor).hand);
-          B.RESOURCES.forEach(k => { spare[k] -= (P.COSTS[t][k] || 0); });
+          B.RESOURCES.forEach(k => { spare[k] -= g.baseCost(t)[k]; });
           const extra = [];
           for (let e = 0; e < g.surcharge(actor).extra; e++) {
             const k = B.RESOURCES.find(k => spare[k] > 0);

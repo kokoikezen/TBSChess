@@ -52,9 +52,8 @@ header .sub { color:var(--muted); font-size:13.5px }
 .ico { pointer-events:none }
 .facet { fill:none; stroke:rgba(255,255,255,.45); stroke-width:1.1; stroke-linejoin:round }
 .tok { pointer-events:none }
-.tok circle { fill:var(--token); stroke:rgba(0,0,0,.3) }
 .tok text {
-  font-family:var(--font-mono); font-size:11px; fill:var(--token-ink);
+  font-family:var(--font-mono); font-size:12.5px; font-weight:700; fill:var(--token-ink);
   text-anchor:middle; dominant-baseline:central;
 }
 .tok text.hot { fill:var(--hot); font-weight:700 }
@@ -277,3 +276,55 @@ tr.cur td { font-weight:600 }
   .hl.on { animation:none; opacity:.55 }
   .modal-card { animation:none }
 }
+
+/* ---- 직전 행동 ---- */
+.trail { pointer-events:none }
+.tr { opacity:.6 }
+.tr.last { opacity:1 }
+.tr-line { stroke:currentColor; stroke-width:4.2; stroke-linecap:round; stroke-dasharray:7 4 }
+.tr-head { fill:currentColor; stroke:var(--halo); stroke-width:1.4 }
+.tr-from { fill:currentColor; stroke:var(--halo); stroke-width:1 }
+.tr-summon { fill:none; stroke:currentColor; stroke-width:3.6; stroke-dasharray:4 3 }
+.recent { padding:7px 0; border-top:1px solid var(--line) }
+.recent:first-child { border-top:0; padding-top:0 }
+.rhead { font-weight:600; display:flex; align-items:center; gap:6px }
+.rhead .lab { margin:0 }
+.rline { font-size:12.5px; color:var(--muted); line-height:1.45 }
+.chips { display:flex; flex-wrap:wrap; gap:5px; margin:4px 0 3px }
+.chip {
+  display:inline-block; font-size:12px; padding:1px 8px; border-radius:999px;
+  border:1px solid var(--line); background:var(--bg);
+}
+.chip.off { color:var(--muted); text-decoration:line-through }
+
+/* ---- 자원 획득 ---- */
+.floats { pointer-events:none }
+.gain {
+  font-family:var(--font-body); font-size:15px; font-weight:800; text-anchor:middle; dominant-baseline:central;
+  paint-order:stroke; stroke:var(--halo); stroke-width:3.5px; stroke-linejoin:round;
+  animation:gainup 2.4s ease-out both;
+}
+@keyframes gainup {
+  0% { opacity:0; transform:translateY(6px) }
+  12% { opacity:1; transform:translateY(0) }
+  70% { opacity:1 }
+  100% { opacity:0; transform:translateY(-26px) }
+}
+.gain { transform-box:fill-box }
+.res { position:relative }
+.res.got { animation:gotflash 4s ease-out both }
+@keyframes gotflash {
+  0%, 30% { box-shadow:0 0 0 3px #ffe83a, 0 0 14px #ffe83a }
+  100% { box-shadow:0 0 0 0 transparent }
+}
+.res .plus {
+  position:absolute; top:-9px; right:-6px; background:#ffe83a; color:#2b241b;
+  font-weight:800; font-size:13px; padding:0 7px; border-radius:999px;
+  animation:plusfade 4s ease-out both;
+}
+@keyframes plusfade { 0%, 70% { opacity:1 } 100% { opacity:0 } }
+.handgain { margin-top:8px; font-size:13.5px }
+.handgain b { color:var(--ink) }
+.plus-s { font-size:11.5px; font-weight:700; color:#b08a00 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .plus-s { color:#ffe83a } }
+:root[data-theme="dark"] .plus-s { color:#ffe83a }

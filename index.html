@@ -45,9 +45,15 @@
         </div>
       </div>
 
+      <div class="card" id="recentcard">
+        <h2>최근 행동 <small>판 위 화살표 = 직전 이동, 점선 원 = 직전 소환</small></h2>
+        <div id="recent"></div>
+      </div>
+
       <div class="card">
         <h2>내 자원 <small><span id="handwho"></span> · <span id="handtotal"></span></small></h2>
         <div class="hand" id="hand"></div>
+        <div class="handgain" id="handgain" hidden></div>
         <p class="lab" style="margin:8px 0 0">자원 종류는 본인만 봅니다. 다른 진영은 장수만 공개됩니다.</p>
       </div>
 
@@ -55,11 +61,11 @@
         <h2>소환 <small id="surcharge"></small></h2>
         <div class="summon" id="summon"></div>
         <div id="extra" hidden style="margin-top:8px"></div>
-        <p class="lab" style="margin:8px 0 0">킹과 변이 맞닿은 6칸 중 빈칸에만 놓을 수 있습니다. 소환은 행위 1회를 씁니다.</p>
+        <p class="lab" style="margin:8px 0 0">킹과 변이 맞닿은 6칸 중 빈칸에만 놓을 수 있습니다. 한 턴에 소환 1회 + 이동 1회 (방금 소환한 기물은 다음 턴부터 움직입니다).</p>
       </div>
 
       <div class="card" id="tradecard">
-        <h2>교역 <small>행위를 쓰기 전까지 자유</small></h2>
+        <h2>교역 <small>턴이 끝나기 전까지 자유</small></h2>
         <p class="lab">은행 4 : 1</p>
         <div class="row" id="bank"></div>
         <div class="row" style="margin-top:7px">
@@ -112,14 +118,16 @@
         <h2>빠른 참조</h2>
         <ul class="notes">
           <li>생산: 나온 숫자의 점령 칸에서 1장, 그 칸에 자기 킹·퀸이 있으면 2장. 도둑 칸은 생산 없음.</li>
-          <li>7: 11장을 넘게(12장 이상) 가졌으면 절반 버리기 → 도둑 이동·약탈 → f6 생산.</li>
+          <li>7: 11장을 넘게 가졌으면 11장만 남기고 버리기 → 도둑 이동, 그 칸 점령자의 자원 1/3 약탈 → f6 생산.</li>
+          <li>한 턴에 소환 1회와 이동 1회를 모두 할 수 있습니다 (순서 자유, 방금 소환한 기물은 못 움직임).</li>
+          <li>마석은 중앙 f6(7) 주변에만 있습니다 — 바로 옆 8, 두 칸 거리 4.</li>
           <li>점령은 마지막으로 밟은 사람의 것. 기물이 떠나도 유지. 본진은 생산 없음.</li>
           <li>잡으면 약탈 1장. 킹을 잡으면 그 플레이어 탈락, 자원 절반을 가져갑니다.</li>
           <li>폰은 앞 · 오른쪽 대각선 · 왼쪽 대각선 1칸으로 가고, 같은 칸으로 잡습니다.</li>
           <li>폰이 전진 방향 판 끝에 닿으면 퀸 · 룩 · 비숍 · 나이트 중 하나로 승급합니다 (퀸은 1개까지).</li>
           <li>킹은 변이 맞닿은 주변 6칸으로만 1칸 — 킹이 갈 수 있는 곳이 곧 소환할 수 있는 곳입니다.</li>
           <li>체크를 받으면 거는 기물과 내 킹이 붉은 아우라로 이어집니다.</li>
-          <li>17라운드부터 소환 +1, 27라운드부터 소환 불가, 32라운드 종료 시 점령 수로 판정.</li>
+          <li>17라운드부터 소환 +1, 27라운드부터 소환 비용 2배, 32라운드 종료 시 점령 수로 판정.</li>
         </ul>
       </div>
     </aside>

@@ -49,12 +49,10 @@ function playOne(seed, seats) {
         if (rich.length) g.tradeBank(pick(rich), pick(B.RESOURCES.filter(k => k !== rich[0])));
       }
       const summons = [];
-      if (!g.summonBlocked()) {
-        for (const t of P.SUMMONABLE) {
-          if (!g.canAfford(i, t)) continue;
-          const cells = g.legalSummonCells(t);
-          if (cells.length) summons.push([t, cells]);
-        }
+      for (const t of P.SUMMONABLE) {
+        if (!g.canAfford(i, t)) continue;
+        const cells = g.legalSummonCells(t);
+        if (cells.length) summons.push([t, cells]);
       }
       const moves = [];
       for (const [from, pc] of g.pieces) {
@@ -67,7 +65,7 @@ function playOne(seed, seats) {
         const extra = g.surcharge(i).extra;
         const picks = [];
         const spare = Object.assign({}, hand);
-        B.RESOURCES.forEach(k => { spare[k] -= (P.COSTS[t][k] || 0); });
+        B.RESOURCES.forEach(k => { spare[k] -= g.baseCost(t)[k]; });
         for (let n = 0; n < extra; n++) {
           const k = pick(B.RESOURCES.filter(k => spare[k] > 0));
           spare[k]--; picks.push(k);

@@ -45,11 +45,11 @@ function rig(g, sum) {
 
 // ---- 2·3장: 구성물과 자원 배치 -------------------------------------------
 
-test('판은 91칸이고 식량27·목재27·철21·마석13·본진3', () => {
+test('판은 91칸이고 식량30·목재27·철24·마석7·본진3 (마석은 줄여서 중앙에)', () => {
   eq(B.order.length, 91, '칸 수');
   const n = {};
   B.order.forEach(id => { const t = B.cells[id].terrain; n[t] = (n[t] || 0) + 1; });
-  eq(['S', 'F', 'W', 'I', 'M'].map(k => k + n[k]), ['S3', 'F27', 'W27', 'I21', 'M13'], '지형 분포');
+  eq(['S', 'F', 'W', 'I', 'M'].map(k => k + n[k]), ['S3', 'F30', 'W27', 'I24', 'M7'], '지형 분포');
 });
 
 test('배치는 120도 회전 대칭 — 세 진영의 자원·숫자 구성이 같다', () => {
@@ -76,6 +76,10 @@ test('마석은 어느 본진에서든 4칸 이상 떨어져 있고 f6은 공용
   });
   eq(B.cells[B.CENTER].dice, 7, 'f6 숫자');
   eq(B.cells[B.CENTER].dist, [5, 5, 5], 'f6 거리');
+  B.order.filter(id => B.cells[id].terrain === 'M').forEach(id => {
+    ok(B.distance(id, B.CENTER) <= 2, id + ' 마석은 중앙 f6 에서 2칸 안');
+  });
+  eq(['f7', 'e5', 'g5'].map(id => B.cells[id].terrain + B.cells[id].dice), ['M8', 'M8', 'M8'], 'f6 바로 옆 마석 8');
 });
 
 // ---- 4장: 게임 준비 --------------------------------------------------------
@@ -126,15 +130,44 @@ test('본진은 생산하지 않고, 도둑이 있는 칸도 생산하지 않는
   eq(B.cells['f11'].dice, null, '본진 숫자');
 });
 
-test('한 턴에는 이동이나 소환 중 하나만 — 쓴 뒤에는 차례가 넘어간다', () => {
+test('한 턴에 소환 1회 + 이동 1회 — 둘 다 쓰면 차례가 넘어간다', () => {
   const g = bare();
   put(g, 'g10', 0, 'P');
-  rig(g, 9);
+  hand(g, 0, { F: 2, W: 2 });
+  rig(g, 2);
   g.roll();
   eq(g.phase, 'action', '행위 단계');
   ok(g.move('g10', 'g9').ok, '폰 전진');
-  eq(g.current, 1, '다음 플레이어');
-  ok(!g.move('g9', 'g8').ok, '턴이 넘어간 뒤 같은 기물을 다시 움직일 수 없다');
+  eq(g.current, 0, '이동만 했으면 아직 내 차례');
+  ok(!g.move('g9', 'g8').ok, '이동은 한 번만');
+  ok(g.summon('P', 'f10').ok, '이동 뒤에도 소환할 수 있다');
+  eq(g.current, 1, '둘 다 쓰면 다음 플레이어');
+});
+
+test('소환을 먼저 해도 이동할 수 있지만, 방금 소환한 기물은 못 움직인다', () => {
+  const g = bare();
+  put(g, 'g10', 0, 'P');
+  hand(g, 0, { F: 4, W: 4 });
+  rig(g, 2);
+  g.roll();
+  ok(g.summon('P', 'f10').ok, '소환');
+  ok(!g.summon('P', 'e10').ok, '소환은 한 번만');
+  eq(g.legalMoves('f10'), [], '방금 소환한 폰은 갈 칸이 없다');
+  ok(!g.move('f10', 'f9').ok, '서버 판정도 거부');
+  ok(g.move('g10', 'g9').ok, '다른 기물은 이동');
+  eq(g.current, 1, '턴 종료');
+});
+
+test('소환만 하고 턴 넘기기로 끝낼 수 있다', () => {
+  const g = bare();
+  hand(g, 0, { F: 2, W: 2 });
+  rig(g, 2);
+  g.roll();
+  ok(g.summon('P', 'f10').ok, '소환');
+  eq(g.current, 0, '아직 내 차례');
+  g.timeout();
+  eq(g.current, 1, '턴 넘기기');
+  ok(g.log.some(e => /P1 턴을 넘깁니다/.test(e.text)), '행위를 쓴 뒤 넘기면 시간 초과라고 하지 않는다');
 });
 
 test('시간 초과는 행위 없이 턴을 끝내고 생산은 유지한다', () => {
@@ -149,9 +182,9 @@ test('시간 초과는 행위 없이 턴을 끝내고 생산은 유지한다', (
 
 // ---- 6장: 주사위 7 --------------------------------------------------------
 
-test('7이면 11장을 넘게 가진 플레이어가 절반을 버린 뒤 도둑, 그 다음 f6 생산', () => {
+test('7이면 11장을 넘게 가진 플레이어가 11장만 남기고 버린 뒤 도둑, 그 다음 f6 생산', () => {
   const g = bare();
-  hand(g, 0, { F: 5, W: 4, I: 3 }); // 12장 → 6장 버림
+  hand(g, 0, { F: 7, W: 6, I: 4 }); // 17장 → 6장 버려 11장
   hand(g, 1, { F: 3 });            // 그대로
   g.owners[B.CENTER] = 0;          // f6 점령
   put(g, 'b1', 1, 'R');            // 도둑 희생자
@@ -162,12 +195,63 @@ test('7이면 11장을 넘게 가진 플레이어가 절반을 버린 뒤 도둑
   eq(g.discardJob(), { player: 0, count: 6 }, '버릴 장수');
   ok(!g.discard({ F: 2 }).ok, '장수가 모자라면 거부');
   ok(g.discard({ F: 4, W: 2 }).ok, '6장 버리기');
+  eq(g.handSize(0), 11, '11장이 남는다');
   eq(g.phase, 'robber', '도둑 단계');
   eq(g.player(0).hand.M, 0, 'f6 생산은 도둑 뒤에');
   ok(g.moveRobber('b1').ok, '도둑 이동');
-  eq(g.player(1).hand.F, 2, 'P2에게서 1장 약탈');
+  eq(g.player(1).hand.F, 2, 'P2 3장 → 1/3 인 1장 약탈');
   eq(g.player(0).hand.M, 1, 'f6 마석 생산');
   eq(g.phase, 'action', '행위 단계로');
+});
+
+test('도둑은 그 칸 점령자의 자원 1/3 을 가져간다 (내림, 최소 1장)', () => {
+  const g = bare();
+  put(g, 'b1', 1, 'R');
+  hand(g, 1, { F: 5, I: 5 });       // 10장 → 3장
+  rig(g, 7);
+  g.roll();
+  ok(g.moveRobber('b1').ok, '도둑 이동');
+  eq(g.handSize(1), 7, 'P2 10장 → 7장');
+  eq(g.handSize(0), 3, 'P1 이 3장 받음');
+  eq(g.gains.list.filter(x => x.player === 0).reduce((a, x) => a + x.n, 0), 3, '획득 기록');
+  const h = bare();
+  put(h, 'b1', 1, 'R');
+  hand(h, 1, { M: 2 });             // 2장 → 내림 0 이지만 최소 1장
+  rig(h, 7);
+  h.roll();
+  h.moveRobber('b1');
+  eq(h.handSize(1), 1, '적어도 1장');
+});
+
+test('생산하면 누가 어느 칸에서 몇 장 받았는지 남는다', () => {
+  const g = bare();
+  put(g, 'g10', 0, 'P');
+  put(g, 'd4', 1, 'K');
+  rig(g, 9);
+  g.roll();
+  const seq = g.gains.seq;
+  eq(g.gains.list.filter(x => x.player === 0), [{ player: 0, res: 'F', n: 1, cell: 'g10' }], 'P1 획득');
+  eq(g.gains.list.filter(x => x.player === 1), [{ player: 1, res: 'F', n: 2, cell: 'd4' }], 'P2 2배');
+  g.timeout(); g.roll();
+  ok(g.gains.seq > seq, '주사위마다 새 기록');
+});
+
+test('직전 턴에 한 일이 플레이어마다 남는다', () => {
+  const g = bare();
+  g.beginTurnRecord();
+  put(g, 'g10', 0, 'P');
+  hand(g, 0, { F: 2, W: 2 });
+  rig(g, 2);
+  g.roll();
+  g.move('g10', 'g9');
+  g.summon('P', 'f10');
+  const t = g.lastTurns[0];
+  eq(t.move, { from: 'g10', to: 'g9', type: 'P' }, '이동');
+  eq(t.summon, { at: 'f10', type: 'P' }, '소환');
+  ok(t.lines.some(l => /주사위/.test(l)), '주사위 줄');
+  eq(g.lastTurns[1], null, 'P2 는 아직 없음');
+  const s = new R.Game({ useTimer: false }).applySnapshot(g.snapshot(1));
+  eq(s.lastTurns[0].move.to, 'g9', '스냅숏으로 전달');
 });
 
 test('7이 나와도 11장 이하면 바로 도둑 단계', () => {
@@ -238,9 +322,9 @@ test('퀸은 판 위에 1개까지, 잡히면 다시 소환할 수 있다', () =
   rig(g, 2);
   g.roll();
   ok(g.summon('Q', 'f10').ok, '첫 퀸');
+  g.summoned = false;                   // 같은 턴의 소환 제한은 빼고 퀸 제한만 본다
   eq(g.legalSummonCells('Q'), [], '두 번째 퀸은 놓을 칸이 없다');
   g.pieces.delete('f10');
-  g.current = 0; g.phase = 'action'; g.actionUsed = false;
   ok(g.legalSummonCells('Q').length > 0, '판에서 사라지면 다시 소환 가능');
 });
 
@@ -286,7 +370,9 @@ test('폰이 판 끝에 닿으면 퀸 · 룩 · 비숍 · 나이트 중 하나�
   ok(g.choosePromotion('R').ok, '룩으로 승급');
   eq(g.pieces.get('f1'), { owner: 0, type: 'R' }, '그 자리에 룩');
   eq(g.owners['f1'], 0, '칸은 점령된 채로');
-  eq(g.current, 1, '고르면 턴 종료');
+  eq(g.current, 0, '소환이 남아 있으면 고른 뒤에도 내 차례');
+  g.timeout();
+  eq(g.current, 1, '턴 넘기기');
 });
 
 test('퀸이 이미 있으면 퀸으로는 승급할 수 없고, 시간이 지나면 자동 승급', () => {
@@ -421,7 +507,7 @@ test('마지막까지 남은 1명이 승리한다', () => {
 
 // ---- 11장: 전쟁 피로 ------------------------------------------------------
 
-test('17라운드부터 소환 비용 +1, 27라운드부터 소환 불가', () => {
+test('17라운드부터 소환 비용 +1, 27라운드부터 소환 비용 2배', () => {
   const g = bare();
   hand(g, 0, { F: 4, W: 4, I: 3, M: 3 });
   g.round = 17;
@@ -432,9 +518,16 @@ test('17라운드부터 소환 비용 +1, 27라운드부터 소환 불가', () =
   ok(g.summon('P', 'f10', ['I']).ok, '철로 추가 비용');
   eq(g.player(0).hand, { F: 2, W: 2, I: 2, M: 3 }, '폰 2·2 + 추가 철 1');
   g.round = 27;
-  g.phase = 'action'; g.actionUsed = false; g.current = 0;
-  ok(g.summonBlocked(), '소환 불가');
-  eq(g.legalSummonCells('P'), [], '놓을 칸 없음');
+  g.phase = 'action'; g.summoned = false; g.current = 0;
+  g.pieces.delete('f10');
+  eq(g.surcharge(0), { extra: 0, reasons: [] }, '2배 단계에서는 +1 이 붙지 않는다');
+  eq(g.baseCost('N'), { F: 4, W: 0, I: 8, M: 0 }, '나이트 식량2·철4 → 2배');
+  hand(g, 0, { F: 3, W: 4 });
+  ok(!g.canAfford(0, 'P'), '폰 2배(식4목4)는 식량 3장으로 못 낸다');
+  hand(g, 0, { F: 4, W: 4 });
+  ok(g.legalSummonCells('P').length > 0, '소환은 막히지 않는다');
+  ok(g.summon('P', 'f10').ok, '2배 비용으로 소환');
+  eq(g.player(0).hand, { F: 0, W: 0, I: 0, M: 0 }, '식량4·목재4 소모');
 });
 
 test('라운드는 생존자가 모두 한 번씩 턴을 마치면 올라간다', () => {
@@ -508,13 +601,15 @@ test('플레이어 간 교역은 상대가 수락해야 성립한다', () => {
   eq(g.player(1).hand, { F: 2, W: 0, I: 0, M: 0 }, 'P2 결과');
 });
 
-test('행위를 쓰면 교역할 수 없다', () => {
+test('소환·이동을 다 쓰면 턴이 끝나 교역할 수 없다', () => {
   const g = bare();
-  hand(g, 0, { W: 4 });
+  hand(g, 0, { F: 2, W: 6 });
   put(g, 'g10', 0, 'P');
-  rig(g, 9);
+  rig(g, 2);
   g.roll();
   g.move('g10', 'g9');
+  ok(g.tradeBank('W', 'I').ok, '이동 뒤에도 소환이 남았으면 교역 가능');
+  g.summon('P', 'f10');
   ok(!g.tradeBank('W', 'I').ok, '턴이 끝난 뒤 교역 불가');
 });
 

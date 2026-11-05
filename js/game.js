@@ -6,9 +6,9 @@
  * 턴 구조 (규칙서 5장)
  *   setup  : 첫 공짜 소환 — 킹 주변 2칸에 폰2 + 나이트1
  *   roll   : 주사위 2개
- *   discard: 합이 7 이고 11장을 넘게(12장 이상) 가진 플레이어가 절반 버리기
- *   robber : 합이 7 이면 굴린 사람이 도둑을 옮기고 1장 약탈, 그 뒤 f6 생산
- *   action : 교역은 자유, 이동 또는 소환 중 하나만 1회 → 턴 종료
+ *   discard: 합이 7 이고 11장을 넘게 가진 플레이어가 11장만 남기고 버리기
+ *   robber : 합이 7 이면 굴린 사람이 도둑을 옮기고 그 칸 점령자의 자원 1/3 약탈, 그 뒤 f6 생산
+ *   action : 교역은 자유, 소환 1회 + 이동 1회 (둘 다 쓰면 턴 종료)
  */
 (function (global) {
   'use strict';
@@ -17,12 +17,14 @@
   const P = global.Pieces;
 
   const TURN_SECONDS = 35;          // 규칙서 5장은 30초 — 조정해서 35초
-  const DISCARD_LIMIT = 12;         // 이 장수부터 절반 버리기 (초안은 8 — 11장을 넘으면으로 조정)
+  const DISCARD_LIMIT = 12;         // 이 장수부터 버리기 (초안은 8장부터 절반)
+  const DISCARD_KEEP = 11;          // 버리고 나면 남는 장수
   const BANK_RATE = 4;              // 은행 교역 4:1
   const FATIGUE_SURCHARGE = 17;     // 이 라운드부터 소환 비용 +1
-  const FATIGUE_NO_SUMMON = 27;     // 이 라운드부터 소환 불가
+  const FATIGUE_DOUBLE = 27;        // 이 라운드부터 소환 비용 2배 (초안은 소환 불가)
   const FINAL_ROUND = 32;           // 이 라운드가 끝나면 점령 수로 판정
   const EMERGENCY_SURCHARGE = 1;    // 긴급 소환 추가 비용
+  const ROBBER_SHARE = 3;           // 도둑은 자원의 1/ROBBER_SHARE 를 가져간다 (초안은 1장)
 
   const emptyHand = () => ({ F: 0, W: 0, I: 0, M: 0 });
   const handSize = h => B.RESOURCES.reduce((a, k) => a + h[k], 0);
@@ -57,7 +59,11 @@
       this.current = this.seats[0];
       this.turnStarts = 0;              // 이번 라운드에 턴을 시작한 생존 플레이어 수
       this.dice = null;
-      this.actionUsed = false;
+      // 조정: 한 턴에 소환 1회와 이동 1회를 모두 쓸 수 있다 (초안은 둘 중 하나).
+      this.summoned = false;
+      this.moved = false;
+      this.fresh = null;                // 이번 턴에 소환한 칸 — 그 기물은 이번 턴에 움직이지 못한다
+      this.actionUsed = false;          // 소환과 이동을 다 썼다
       this.phase = 'setup';
       this.setupQueue = [];             // [{player, type}] 순서대로 공짜 배치
       this.pendingDiscards = [];        // [{player, count}]
@@ -67,6 +73,10 @@
       this.log = [];
       this.deadline = null;
       this.lastError = null;
+      this.turnRecord = null;           // 지금 진행 중인 턴에 일어난 일
+      this.lastTurns = [null, null, null];  // 플레이어마다 마지막으로 마친 턴 {round, lines, move, summon}
+      this.gains = null;                // 가장 최근 자원 획득 {seq, list:[{player, res, n, cell}]}
+      this.gainSeq = 0;
 
       // 킹을 본진에 놓는다 (규칙서 4장). 본진 칸도 점령 표시가 된다.
       this.alivePlayers().forEach(p => {
@@ -86,7 +96,10 @@
 
     // ---- 기본 조회 -------------------------------------------------------
 
-    say(text) { this.log.push({ round: this.round, text }); }
+    say(text) {
+      this.log.push({ round: this.round, text });
+      if (this.turnRecord) this.turnRecord.lines.push(text);
+    }
     alivePlayers() { return this.players.filter(p => p.alive); }
     player(i) { return this.players[i]; }
     /** 남의 손패는 종류가 가려져 있으므로(12장) 장수만 따로 들고 있는다. */
@@ -114,16 +127,28 @@
       return false;
     }
 
-    /** 이번 턴 소환 추가 비용 — 전쟁 피로(11장) + 긴급 소환(8장) */
+    /** 이번 턴 소환 추가 비용 — 전쟁 피로(11장) + 긴급 소환(8장).
+     *  전쟁 피로 마지막 단계에서는 +1 대신 기본 비용이 2배가 된다(baseCost). */
     surcharge(i) {
       let extra = 0;
       const reasons = [];
-      if (this.round >= FATIGUE_SURCHARGE) { extra += 1; reasons.push('전쟁 피로 +1'); }
+      if (this.round >= FATIGUE_SURCHARGE && !this.costDoubled()) { extra += 1; reasons.push('전쟁 피로 +1'); }
       if (this.inCheck(i)) { extra += EMERGENCY_SURCHARGE; reasons.push('긴급 소환 +' + EMERGENCY_SURCHARGE); }
       return { extra, reasons };
     }
 
-    summonBlocked() { return this.round >= FATIGUE_NO_SUMMON; }
+    /** 전쟁 피로 마지막 단계 — 모든 소환 비용 2배 */
+    costDoubled() { return this.round >= FATIGUE_DOUBLE; }
+
+    /** 추가 비용을 빼고 이번 라운드에 내야 하는 기본 비용 */
+    baseCost(type) {
+      const base = P.COSTS[type];
+      if (!base) return null;
+      const mul = this.costDoubled() ? 2 : 1;
+      const out = emptyHand();
+      B.RESOURCES.forEach(k => { out[k] = (base[k] || 0) * mul; });
+      return out;
+    }
 
     /** 소환 가능 칸: 킹과 변이 맞닿은 6칸 중 빈칸 (첫 공짜 소환만 2칸) */
     summonCells(i) {
@@ -140,9 +165,8 @@
 
     /** 실제로 낼 비용. extraFrom 은 추가 비용으로 낼 자원 종류(들). */
     costOf(i, type, extraFrom) {
-      const base = P.COSTS[type];
-      if (!base) return null;
-      const cost = Object.assign(emptyHand(), base);
+      const cost = this.baseCost(type);
+      if (!cost) return null;
       const extra = this.surcharge(i).extra;
       if (extra > 0) {
         const picks = [].concat(extraFrom || []);
@@ -158,7 +182,7 @@
     /** 추가 비용을 아무 자원으로든 낼 수 있는지 — 조합이 하나라도 되면 true */
     affordableWithExtra(i, type, extra) {
       const hand = this.players[i].hand;
-      const base = P.COSTS[type];
+      const base = this.baseCost(type);
       let slack = 0;
       for (const k of B.RESOURCES) {
         const need = base[k] || 0;
@@ -178,7 +202,8 @@
     legalMoves(from) {
       const piece = this.pieces.get(from);
       if (!piece || piece.owner !== this.current) return [];
-      if (this.phase !== 'action' || this.actionUsed) return [];
+      if (this.phase !== 'action' || this.moved || this.actionUsed) return [];
+      if (from === this.fresh) return [];
       if (!this.canAct(this.current)) return [];
       let all = P.moves(this.pieces, from);
       // 조정: 킹은 공격받는 칸(들어가면 체크가 되는 칸)으로는 갈 수 없다
@@ -191,9 +216,8 @@
 
     legalSummonCells(type) {
       const i = this.current;
-      if (this.phase !== 'action' || this.actionUsed) return [];
+      if (this.phase !== 'action' || this.summoned || this.actionUsed) return [];
       if (!this.canAct(i)) return [];
-      if (this.summonBlocked()) return [];
       if (type === 'Q' && this.queenOnBoard(i)) return [];
       const cells = this.summonCells(i);
       if (!this.inCheck(i) || !this.hasCheckRelief()) return cells;
@@ -213,7 +237,7 @@
         }
         if (relief) break;
       }
-      if (!relief && !this.summonBlocked()) {
+      if (!relief) {
         // 소환으로 사이를 막는 것도 체크 해소다. 실제로 낼 수 있는 기물만 센다.
         const extra = this.surcharge(i).extra;
         for (const type of P.SUMMONABLE) {
@@ -241,6 +265,13 @@
 
     give(i, res, n) {
       if (n > 0) this.players[i].hand[res] += n;
+    }
+
+    /** 자원 획득을 화면에 보여 주려고 따로 모은다. 주사위·도둑·약탈마다 새로 시작한다. */
+    beginGains() { this.gains = { seq: ++this.gainSeq, list: [] }; }
+    gained(player, res, n, cell) {
+      if (!this.gains) this.beginGains();
+      this.gains.list.push({ player, res, n, cell: cell || null });
     }
 
     /** 무작위 1장 뽑기 — 약탈과 도둑에 쓴다. */
@@ -274,6 +305,7 @@
         this.phase = 'roll';
         this.current = this.seats[0];
         this.turnStarts = 1;
+        this.beginTurnRecord();
         this.startTimer();
         this.say('— 1라운드 시작. P' + (this.current + 1) + ' 차례입니다.');
       } else {
@@ -291,15 +323,16 @@
       this.dice = [a, b];
       const sum = a + b;
       this.say('P' + (this.current + 1) + ' 주사위 ' + a + '+' + b + ' = ' + sum);
+      this.beginGains();
 
       if (sum === 7) {
         this.stopTimer();          // 버리기·도둑 처리 동안 제한 시간은 멈춘다
         this.pendingDiscards = this.alivePlayers()
           .filter(p => handSize(p.hand) >= DISCARD_LIMIT)
-          .map(p => ({ player: p.index, count: Math.floor(handSize(p.hand) / 2) }));
+          .map(p => ({ player: p.index, count: handSize(p.hand) - DISCARD_KEEP }));
         if (this.pendingDiscards.length) {
           this.phase = 'discard';
-          this.say('7! 자원 ' + DISCARD_LIMIT + '장 이상인 플레이어는 절반을 버립니다.');
+          this.say('7! 자원이 ' + DISCARD_KEEP + '장을 넘는 플레이어는 ' + DISCARD_KEEP + '장만 남기고 버립니다.');
         } else {
           this.phase = 'robber';
           this.say('7! 도둑을 옮길 칸을 고르세요.');
@@ -327,6 +360,7 @@
         const doubled = !!piece && piece.owner === owner && (piece.type === 'K' || piece.type === 'Q');
         const n = doubled ? 2 : 1;
         this.give(owner, cell.terrain, n);
+        this.gained(owner, cell.terrain, n, id);
         gains.push('P' + (owner + 1) + ' ' + B.RES_INFO[cell.terrain].name + n
           + '(' + id + (doubled ? ' 2배' : '') + ')');
       }
@@ -365,11 +399,20 @@
       this.robber = id;
       this.robberBy = this.current;
       this.say('P' + (this.current + 1) + '이 도둑을 ' + id + '로 옮겼습니다.');
+      this.beginGains();
       const victim = this.owners[id];
       if (victim !== undefined && victim !== this.current && this.players[victim].alive) {
-        const res = this.stealRandom(victim, this.current);
-        this.say(res
-          ? 'P' + (this.current + 1) + '이 P' + (victim + 1) + '의 ' + B.RES_INFO[res].name + ' 1장을 빼앗았습니다.'
+        // 조정: 1장이 아니라 가진 자원의 1/3 (내림, 최소 1장)
+        const total = handSize(this.players[victim].hand);
+        const got = emptyHand();
+        for (let n = total ? Math.max(1, Math.floor(total / ROBBER_SHARE)) : 0; n > 0; n--) {
+          const res = this.stealRandom(victim, this.current);
+          if (!res) break;
+          got[res] += 1;
+        }
+        B.RESOURCES.forEach(k => { if (got[k]) this.gained(this.current, k, got[k], id); });
+        this.say(handSize(got)
+          ? 'P' + (this.current + 1) + '이 P' + (victim + 1) + '의 자원 ' + handSize(got) + '장(' + fmtHand(got) + ')을 빼앗았습니다.'
           : 'P' + (victim + 1) + '은 빼앗길 자원이 없습니다.');
       }
       this.produce(7);           // f6 생산은 버리기·도둑 뒤에 (FAQ)
@@ -437,8 +480,7 @@
     summon(type, id, extraFrom) {
       const i = this.current;
       if (this.phase !== 'action') return this.fail('행위 단계가 아닙니다.');
-      if (this.actionUsed) return this.fail('이번 턴의 행위를 이미 썼습니다.');
-      if (this.summonBlocked()) return this.fail(FATIGUE_NO_SUMMON + '라운드부터는 소환할 수 없습니다.');
+      if (this.summoned || this.actionUsed) return this.fail('이번 턴에는 이미 소환했습니다.');
       if (P.SUMMONABLE.indexOf(type) < 0) return this.fail('소환할 수 없는 기물입니다.');
       if (type === 'Q' && this.queenOnBoard(i)) return this.fail('퀸은 판 위에 1개까지입니다.');
       if (this.legalSummonCells(type).indexOf(id) < 0) return this.fail('그 칸에는 소환할 수 없습니다.');
@@ -453,6 +495,9 @@
       this.owners[id] = i;               // 소환한 칸도 점령된다
       this.say('P' + (i + 1) + ' ' + P.PIECE_INFO[type].name + ' 소환 → ' + id
         + ' (' + fmtHand(cost) + (reasons.length ? ', ' + reasons.join(', ') : '') + ')');
+      this.summoned = true;
+      this.fresh = id;
+      if (this.turnRecord) this.turnRecord.summon = { at: id, type };
       return this.finishAction();
     }
 
@@ -461,9 +506,10 @@
     move(from, to) {
       const i = this.current;
       if (this.phase !== 'action') return this.fail('행위 단계가 아닙니다.');
-      if (this.actionUsed) return this.fail('이번 턴의 행위를 이미 썼습니다.');
+      if (this.moved || this.actionUsed) return this.fail('이번 턴에는 이미 이동했습니다.');
       const piece = this.pieces.get(from);
       if (!piece || piece.owner !== i) return this.fail('내 기물이 아닙니다.');
+      if (from === this.fresh) return this.fail('방금 소환한 기물은 다음 턴부터 움직일 수 있습니다.');
       const legal = this.legalMoves(from).find(m => m.to === to);
       if (!legal) return this.fail('그 칸으로는 갈 수 없습니다.');
 
@@ -473,10 +519,14 @@
       this.owners[to] = i;               // 칸은 마지막으로 밟은 사람의 것
       this.say('P' + (i + 1) + ' ' + P.PIECE_INFO[piece.type].name + ' ' + from + ' → ' + to
         + (victim ? ' (P' + (victim.owner + 1) + ' ' + P.PIECE_INFO[victim.type].name + ' 잡음)' : ''));
+      this.moved = true;
+      if (this.turnRecord) this.turnRecord.move = { from, to, type: piece.type };
 
       if (victim) {
         // 약탈: 잡힌 플레이어의 자원 1장을 무작위로
+        this.beginGains();
         const res = this.stealRandom(victim.owner, i);
+        if (res) this.gained(i, res, 1, to);
         if (res) this.say('약탈: P' + (victim.owner + 1) + '의 ' + B.RES_INFO[res].name + ' 1장');
         if (victim.type === 'K') this.eliminate(victim.owner, i);
       }
@@ -525,6 +575,7 @@
         if (!res) break;
         got[res] += 1;
       }
+      B.RESOURCES.forEach(k => { if (got[k]) this.gained(killer, k, got[k], null); });
       this.say('P' + (victim + 1) + ' 탈락! P' + (killer + 1) + '이 자원 절반('
         + (fmtHand(got) || '없음') + ')을 가져갑니다.');
 
@@ -567,13 +618,15 @@
     // ---- 턴 넘기기 -------------------------------------------------------
 
     finishAction() {
-      this.actionUsed = true;
+      if (this.summoned && this.moved) this.actionUsed = true;
       this.advanceIfReady();
       return this.done();
     }
 
+    /** 소환과 이동을 다 썼으면 턴을 넘긴다. 하나라도 남았으면 기다린다(턴 넘기기로 끝낼 수 있다). */
     advanceIfReady() {
       if (this.phase === 'gameover') return;
+      if (!this.actionUsed) return;
       if (this.pendingPromotion) return;      // 승급할 기물을 고르기 전에는 넘기지 않는다
       this.endTurn();
     }
@@ -588,9 +641,11 @@
       if (this.phase !== 'action') return this.done();
       if (this.pendingPromotion) {            // 고르지 못했으면 가장 센 기물로
         this.say('P' + (this.current + 1) + ' 시간 초과 — 승급을 자동으로 고릅니다.');
-        return this.choosePromotion(this.promotionChoices(this.pendingPromotion.player)[0]);
+        const turn = this.round + ':' + this.current;
+        this.choosePromotion(this.promotionChoices(this.pendingPromotion.player)[0]);
+        if (this.phase !== 'action' || turn !== this.round + ':' + this.current) return this.done();
       }
-      this.say('P' + (this.current + 1) + ' 시간 초과 — 행위 없이 턴을 넘깁니다.');
+      this.say('P' + (this.current + 1) + ((this.summoned || this.moved) ? ' 턴을 넘깁니다.' : ' 시간 초과 — 행위 없이 턴을 넘깁니다.'));
       this.endTurn();
       return this.done();
     }
@@ -598,7 +653,12 @@
     endTurn() {
       this.offer = null;
       this.actionUsed = false;
+      this.summoned = false;
+      this.moved = false;
+      this.fresh = null;
       this.dice = null;
+      if (this.turnRecord) this.lastTurns[this.turnRecord.player] = this.turnRecord;
+      this.turnRecord = null;
 
       // 라운드 판정: 남아 있는 플레이어가 모두 한 번씩 턴을 마치면 1라운드
       if (this.turnStarts >= this.alivePlayers().length) {
@@ -607,7 +667,7 @@
         this.turnStarts = 0;
         this.say('— ' + this.round + '라운드');
         if (this.round === FATIGUE_SURCHARGE) this.say('전쟁 피로: 모든 소환 비용 +1');
-        if (this.round === FATIGUE_NO_SUMMON) this.say('전쟁 피로: 더 이상 소환할 수 없습니다');
+        if (this.round === FATIGUE_DOUBLE) this.say('전쟁 피로: 모든 소환 비용 2배');
       }
 
       // 다음 생존 플레이어 (시계 방향 1 → 2 → 3)
@@ -619,7 +679,12 @@
       this.current = next;
       this.turnStarts += 1;
       this.phase = 'roll';
+      this.beginTurnRecord();
       this.startTimer();
+    }
+
+    beginTurnRecord() {
+      this.turnRecord = { player: this.current, round: this.round, lines: [], move: null, summon: null };
     }
 
     // ---- 제한 시간 -------------------------------------------------------
@@ -660,6 +725,11 @@
         turnStarts: this.turnStarts,
         dice: this.dice,
         actionUsed: this.actionUsed,
+        summoned: this.summoned,
+        moved: this.moved,
+        fresh: this.fresh,
+        lastTurns: JSON.parse(JSON.stringify(this.lastTurns)),
+        gains: this.gains && JSON.parse(JSON.stringify(this.gains)),
         phase: this.phase,
         setupQueue: this.setupQueue.map(j => ({ player: j.player, type: j.type })),
         pendingDiscards: this.pendingDiscards.map(d => ({ player: d.player, count: d.count })),
@@ -693,6 +763,11 @@
       this.turnStarts = s.turnStarts;
       this.dice = s.dice;
       this.actionUsed = s.actionUsed;
+      this.summoned = !!s.summoned;
+      this.moved = !!s.moved;
+      this.fresh = s.fresh || null;
+      this.lastTurns = s.lastTurns ? JSON.parse(JSON.stringify(s.lastTurns)) : [null, null, null];
+      this.gains = s.gains ? JSON.parse(JSON.stringify(s.gains)) : null;
       this.phase = s.phase;
       this.setupQueue = s.setupQueue.map(j => ({ player: j.player, type: j.type }));
       this.pendingDiscards = s.pendingDiscards.map(d => ({ player: d.player, count: d.count }));
@@ -722,7 +797,7 @@
 
   global.GameRules = {
     Game, TURN_SECONDS, DISCARD_LIMIT, BANK_RATE,
-    FATIGUE_SURCHARGE, FATIGUE_NO_SUMMON, FINAL_ROUND,
+    FATIGUE_SURCHARGE, FATIGUE_DOUBLE, FINAL_ROUND, DISCARD_KEEP, ROBBER_SHARE,
     handSize, fmtHand,
   };
 })(window);

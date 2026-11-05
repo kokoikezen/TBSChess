@@ -19,9 +19,9 @@
   const PHASE_TEXT = {
     setup: '① 첫 공짜 소환',
     roll: '① 주사위',
-    discard: '7 — 절반 버리기',
+    discard: '7 — 자원 버리기',
     robber: '7 — 도둑 이동',
-    action: '③ 교역 · ④ 행위 1회',
+    action: '③ 교역 · ④ 소환 1회 + 이동 1회',
     gameover: '게임 종료',
   };
 
@@ -91,8 +91,8 @@
         }, g);
 
         if (c.dice) {
+          // 숫자만 적는다 (흰 원판은 판을 어지럽혀서 뺐다)
           const tok = svgEl('g', { class: 'tok' }, g);
-          svgEl('circle', { cx: X, cy: Y + HEX_R * 0.42, r: 8.2 }, tok);
           const t = svgEl('text', {
             x: X, y: Y + HEX_R * 0.42 + 0.5,
             class: (c.dice === 6 || c.dice === 7 || c.dice === 8) ? 'hot' : '',
@@ -122,6 +122,8 @@
         this.nodes[id] = node;
       }
       this.drawAxes();
+      // 다른 플레이어가 직전 턴에 옮긴 길과 소환한 칸
+      this.trail = svgEl('g', { class: 'trail' }, this.svg);
       // 아우라와 연결선은 모든 칸 위에 그려야 이웃 칸에 가리지 않는다.
       this.overlay = svgEl('g', { class: 'overlay' }, this.svg);
       // 도둑도 맨 위에 그린다. 칸 안에 두면 뒤에 그려진 이웃 칸에 가려 보이지 않았다.
@@ -129,6 +131,8 @@
       svgEl('circle', { cx: 0, cy: 0, r: 12.5, class: 'robber-disc' }, this.robberMark);
       svgEl('text', { x: 0, y: 1, class: 'robber-glyph' }, this.robberMark).textContent = '🦝';
       this.robberMark.style.display = 'none';
+      // 자원 획득 숫자가 떠오르는 층 — 맨 위
+      this.floats = svgEl('g', { class: 'floats' }, this.svg);
     }
 
     px(c) { return this.cx + c.x * 1.5 * HEX_R; }
@@ -184,7 +188,9 @@
       const piece = g.pieces.get(id);
       this.sel = (piece && piece.owner === g.current && g.legalMoves(id).length) ? id : null;
       if (piece && piece.owner === g.current && !g.legalMoves(id).length) {
-        this.message = P.PIECE_INFO[piece.type].name + '은 갈 수 있는 칸이 없습니다.';
+        this.message = g.moved ? '이번 턴에는 이미 이동했습니다.'
+          : (id === g.fresh ? '방금 소환한 기물은 다음 턴부터 움직일 수 있습니다.'
+            : P.PIECE_INFO[piece.type].name + '은 갈 수 있는 칸이 없습니다.');
       }
       this.render();
     }
@@ -264,6 +270,8 @@
       }
 
       this.renderAura(threats);
+      this.renderTrail();
+      this.renderGains();
       this.renderRobber();
       this.renderFatigue();
       this.renderTurn();
@@ -271,10 +279,117 @@
       this.renderSummon();
       this.renderTrade();
       this.renderPlayers();
+      this.renderRecent();
       this.renderLog();
       this.renderBanner();
       this.renderAttention();
       this.renderEnd();
+    }
+
+    // ---- 직전 행동 -------------------------------------------------------
+
+    /** 나보다 앞서 둔 플레이어들, 바로 전 사람부터. 3인전이면 2명, 2인전이면 상대 1명.
+     *  온라인은 내 자리 기준, 핫시트는 지금 차례인 사람 기준. */
+    previousPlayers() {
+      const g = this.game;
+      const me = g.viewer !== null ? g.viewer : g.current;
+      const seats = g.seats.filter(i => !g.player(i).absent);
+      const out = [];
+      let k = me;
+      for (let n = 0; n < seats.length - 1; n++) {
+        do { k = (k + 2) % 3; } while (seats.indexOf(k) < 0);
+        out.push(k);
+      }
+      return out;
+    }
+
+    renderRecent() {
+      const g = this.game;
+      const box = $('recent');
+      $('recentcard').hidden = g.phase === 'setup';
+      const rows = this.previousPlayers().map((i, n) => {
+        const t = g.lastTurns[i];
+        const head = '<div class="rhead"><span class="pdot" style="background:var(' + PCOL[i] + ')"></span>P' + (i + 1)
+          + (n === 0 ? ' <span class="lab">바로 전</span>' : '')
+          + (t ? ' <span class="lab">R' + t.round + '</span>' : '')
+          + (g.player(i).alive ? '' : ' <span class="lab">탈락</span>') + '</div>';
+        if (!t) return '<div class="recent">' + head + '<div class="lab">아직 둔 턴이 없습니다.</div></div>';
+        const chips = [];
+        if (t.summon) chips.push('<span class="chip">소환 ' + P.PIECE_INFO[t.summon.type].glyph + ' '
+          + P.PIECE_INFO[t.summon.type].name + ' ' + t.summon.at + '</span>');
+        if (t.move) chips.push('<span class="chip">이동 ' + P.PIECE_INFO[t.move.type].glyph + ' '
+          + t.move.from + ' → ' + t.move.to + '</span>');
+        if (!t.summon && !t.move) chips.push('<span class="chip off">소환·이동 없음</span>');
+        // 소환·이동 줄은 칩으로 보여 줬으니 나머지(주사위·생산·도둑·교역 …)만 적는다
+        const lines = t.lines.filter(l => !/^—/.test(l) && (!/ 소환 → | → [a-l]\d+/.test(l) || /도둑|교역/.test(l)));
+        return '<div class="recent">' + head + '<div class="chips">' + chips.join('') + '</div>'
+          + lines.slice(-5).map(l => '<div class="rline">' + esc(l) + '</div>').join('') + '</div>';
+      });
+      box.innerHTML = rows.join('') || '<div class="lab">혼자 남았습니다.</div>';
+    }
+
+    /** 판 위에 직전 턴의 이동(화살표)과 소환(점선 원)을 그 진영 색으로 */
+    renderTrail() {
+      const g = this.game;
+      while (this.trail.firstChild) this.trail.removeChild(this.trail.firstChild);
+      if (g.phase === 'setup' || g.phase === 'gameover') return;
+      this.previousPlayers().forEach((i, n) => {
+        const t = g.lastTurns[i];
+        if (!t) return;
+        const col = 'var(' + PCOL[i] + ')';
+        const g2 = svgEl('g', { class: 'tr' + (n === 0 ? ' last' : ''), style: 'color:' + col }, this.trail);
+        if (t.move) {
+          const a = this.nodes[t.move.from], b = this.nodes[t.move.to];
+          const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          const ex = b.x - ux * 12, ey = b.y - uy * 12;
+          svgEl('circle', { cx: a.x, cy: a.y, r: 4, class: 'tr-from' }, g2);
+          svgEl('line', { x1: a.x, y1: a.y, x2: ex, y2: ey, class: 'tr-line' }, g2);
+          const s = 7;
+          svgEl('polygon', {
+            class: 'tr-head',
+            points: [[ex + ux * s, ey + uy * s], [ex - uy * s * 0.7, ey + ux * s * 0.7], [ex + uy * s * 0.7, ey - ux * s * 0.7]]
+              .map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' '),
+          }, g2);
+        }
+        if (t.summon) {
+          const c = this.nodes[t.summon.at];
+          svgEl('circle', { cx: c.x, cy: c.y, r: HEX_R - 4, class: 'tr-summon' }, g2);
+        }
+      });
+    }
+
+    // ---- 자원 획득 -------------------------------------------------------
+
+    /** 새 획득이 생기면 그 칸 위로 "+n" 을 띄우고, 손패 카드에 잠깐 표시한다. */
+    renderGains() {
+      const g = this.game;
+      const gs = g.gains;
+      const seq = gs ? gs.seq : 0;
+      if (this.gainSeen === undefined) { this.gainSeen = seq; return; }   // 처음 그릴 때는 지난 일을 띄우지 않는다
+      if (seq === this.gainSeen) return;
+      this.gainSeen = seq;
+      this.gainAt = Date.now();
+      gs.list.forEach((x, k) => {
+        if (!x.cell || !this.nodes[x.cell]) return;
+        const n = this.nodes[x.cell];
+        const t = svgEl('text', {
+          x: n.x, y: n.y - 4, class: 'gain',
+          style: 'fill:var(' + PCOL[x.player] + ');animation-delay:' + (k % 6) * 60 + 'ms',
+        }, this.floats);
+        t.textContent = '+' + x.n + ' ' + B.RES_INFO[x.res].glyph;
+        setTimeout(() => t.remove(), 2600);
+      });
+    }
+
+    /** 가장 최근 획득에서 i 가 받은 양 {F,W,I,M} — 없으면 null */
+    gainOf(i) {
+      const gs = this.game.gains;
+      if (!gs) return null;
+      const out = { F: 0, W: 0, I: 0, M: 0 };
+      let any = false;
+      gs.list.forEach(x => { if (x.player === i) { out[x.res] += x.n; any = true; } });
+      return any ? out : null;
     }
 
     /** 도둑 표시 — 칸 오른쪽 위에 작은 원판 */
@@ -292,9 +407,9 @@
 
     // ---- 전쟁 피로 -------------------------------------------------------
 
-    /** 0: 평시, 1: 소환 +1, 2: 소환 불가 */
+    /** 0: 평시, 1: 소환 +1, 2: 소환 비용 2배 */
     fatigueStageOf(round) {
-      return round >= R.FATIGUE_NO_SUMMON ? 2 : (round >= R.FATIGUE_SURCHARGE ? 1 : 0);
+      return round >= R.FATIGUE_DOUBLE ? 2 : (round >= R.FATIGUE_SURCHARGE ? 1 : 0);
     }
 
     /** 보드 맨 위 줄 — 전쟁 피로까지 몇 라운드 남았는지. 단계가 올라가면 알린다. */
@@ -309,9 +424,9 @@
         html = '전쟁 피로까지 ' + left(R.FATIGUE_SURCHARGE - r) + ' 남음 <span class="lab">'
           + R.FATIGUE_SURCHARGE + '라운드부터 소환 비용 +1</span>';
       } else if (stage === 1) {
-        html = '<span class="warn">전쟁 피로</span> 소환 비용 +1 · 소환 불가까지 ' + left(R.FATIGUE_NO_SUMMON - r) + ' 남음';
+        html = '<span class="warn">전쟁 피로</span> 소환 비용 +1 · 비용 2배까지 ' + left(R.FATIGUE_DOUBLE - r) + ' 남음';
       } else {
-        html = '<span class="warn">전쟁 피로</span> 소환 불가 · 게임 종료까지 ' + left(R.FINAL_ROUND - r + 1) + ' 남음';
+        html = '<span class="warn">전쟁 피로</span> 소환 비용 2배 · 게임 종료까지 ' + left(R.FINAL_ROUND - r + 1) + ' 남음';
       }
       const el = $('fatigue');
       el.innerHTML = '<span class="rnd">' + r + ' / ' + R.FINAL_ROUND + '라운드</span>' + html;
@@ -322,7 +437,7 @@
         // 라운드가 바뀌는 순간은 차례 알림과 겹치므로, 띄우는 일은 renderAttention 이 합쳐서 한다
         this.fatigueNote = stage === 1
           ? '⚔ 전쟁 피로 시작! 이제 모든 소환 비용 +1'
-          : '⚔ 전쟁 피로 심화! 이제 소환할 수 없습니다';
+          : '⚔ 전쟁 피로 심화! 이제 모든 소환 비용 2배';
       }
       this.fatigueStage = stage;
     }
@@ -515,7 +630,7 @@
       bits.push(g.robber
         ? '🦝 도둑 ' + g.robber + (g.robberBy !== null ? ' (P' + (g.robberBy + 1) + '이 옮김)' : '')
         : '🦝 도둑 판 밖');
-      if (g.round >= R.FATIGUE_NO_SUMMON) bits.push('소환 불가');
+      if (g.round >= R.FATIGUE_DOUBLE) bits.push('소환 비용 2배');
       else if (g.round >= R.FATIGUE_SURCHARGE) bits.push('소환 비용 +1');
       if (g.phase !== 'gameover' && g.inCheck(g.current)) {
         const by = g.checkers(g.current).map(id => {
@@ -563,27 +678,40 @@
         : (g.phase === 'discard' ? g.discardJob().player
           : (g.phase === 'setup' ? g.setupJob().player : g.current));
       const hand = g.player(owner).hand;
+      const got = this.gainOf(owner);
+      // 받은 직후 몇 초 동안은 카드에 "+n" 을 띄운다. 다시 그려도 애니메이션이 처음부터 시작하지 않게 지난 시간만큼 당긴다.
+      const age = this.gainAt ? Date.now() - this.gainAt : Infinity;
+      const fresh = got && age < 4000;
       $('handwho').textContent = 'P' + (owner + 1);
       $('hand').innerHTML = B.RESOURCES.map(k =>
-        '<div class="res sw' + k + '"><div class="n">' + hand[k] + '</div>'
-        + '<div class="k">' + B.RES_INFO[k].name + '</div></div>').join('');
+        '<div class="res sw' + k + (fresh && got[k] ? ' got' : '') + '"' + (fresh && got[k] ? ' style="animation-delay:-' + age + 'ms"' : '') + '>'
+        + '<div class="n">' + hand[k] + '</div>'
+        + '<div class="k">' + B.RES_INFO[k].name + '</div>'
+        + (fresh && got[k] ? '<div class="plus" style="animation-delay:-' + age + 'ms">+' + got[k] + '</div>' : '')
+        + '</div>').join('');
+      const gainEl = $('handgain');
+      if (got) {
+        gainEl.hidden = false;
+        gainEl.innerHTML = '최근 획득 <b>+' + R.handSize(got) + '장</b> ' + esc(R.fmtHand(got));
+      } else gainEl.hidden = true;
       $('handtotal').textContent = R.handSize(hand) + '장'
-        + (R.handSize(hand) >= R.DISCARD_LIMIT ? ' · 7이 나오면 절반 버리기' : '');
+        + (R.handSize(hand) >= R.DISCARD_LIMIT
+          ? ' · 7이 나오면 ' + (R.handSize(hand) - R.DISCARD_KEEP) + '장 버리기' : '');
     }
 
     renderSummon() {
       const g = this.game;
       const i = g.current;
       const sc = g.surcharge(i);
-      const open = g.phase === 'action' && !g.actionUsed && !g.pendingPromotion;
+      const open = g.phase === 'action' && !g.actionUsed && !g.summoned && !g.pendingPromotion;
 
-      $('surcharge').textContent = g.summonBlocked()
-        ? '전쟁 피로: 소환 불가'
+      $('surcharge').textContent = g.costDoubled()
+        ? '전쟁 피로: 비용 2배' + (sc.extra ? ' · 추가 +' + sc.extra + ' (' + sc.reasons.join(', ') + ')' : '')
         : (sc.extra ? '추가 비용 +' + sc.extra + ' (' + sc.reasons.join(', ') + ')' : '추가 비용 없음');
 
       $('summon').innerHTML = P.SUMMONABLE.map(t => {
-        const cost = Object.assign({ F: 0, W: 0, I: 0, M: 0 }, P.COSTS[t]);
-        const can = open && !g.summonBlocked() && g.canAfford(i, t)
+        const cost = g.baseCost(t);
+        const can = open && g.canAfford(i, t)
           && !(t === 'Q' && g.queenOnBoard(i)) && g.summonCells(i).length;
         return '<button class="sbtn" data-type="' + t + '"'
           + ' aria-pressed="' + (this.summonType === t) + '"' + (can ? '' : ' disabled') + '>'
@@ -609,7 +737,7 @@
       if (!need) { box.innerHTML = ''; box.hidden = true; }
       else {
         box.hidden = false;
-        const base = P.COSTS[this.summonType];
+        const base = g.baseCost(this.summonType);
         const spare = {};
         B.RESOURCES.forEach(k => {
           spare[k] = g.player(i).hand[k] - (base[k] || 0)
@@ -686,7 +814,7 @@
           return '<tr class="' + (p.alive ? '' : 'off') + (cur ? ' cur' : '') + '">'
             + '<td><span class="pdot" style="background:var(' + PCOL[p.index] + ')"></span>P' + (p.index + 1)
             + (g.viewer === p.index ? ' (나)' : '') + (cur ? ' ◀ 차례' : '') + '</td>'
-            + '<td>' + R.handSize(p.hand) + '</td>'
+            + '<td>' + R.handSize(p.hand) + (this.gainOf(p.index) ? ' <span class="plus-s">+' + R.handSize(this.gainOf(p.index)) + '</span>' : '') + '</td>'
             + '<td>' + g.ownedCells(p.index).length + '</td>'
             + '<td>' + g.materialOf(p.index) + '</td>'
             + '<td>' + st + '</td></tr>';
@@ -744,11 +872,11 @@
         const text = {
           setup: '킹 주변 2칸의 빈칸을 눌러 ' + P.PIECE_INFO[(g.setupJob() || { type: 'P' }).type].name + '을 놓으세요.',
           roll: '주사위를 굴리세요.',
-          robber: '도둑을 옮길 칸을 누르세요. 그 칸을 점령한 플레이어의 자원 1장을 빼앗습니다.',
-          action: g.actionUsed ? '행위를 다 썼습니다.'
+          robber: '도둑을 옮길 칸을 누르세요. 그 칸을 점령한 플레이어의 자원 1/3을 빼앗습니다.',
+          action: g.actionUsed ? '소환과 이동을 다 썼습니다.'
             : (this.summonType ? '소환할 칸을 고르세요.'
               : (this.sel ? '갈 칸을 고르세요.'
-                : '기물을 눌러 이동하거나, 오른쪽에서 소환할 기물을 고르세요. 교역은 자유입니다.')),
+                : this.actionLeft())),
         }[g.phase];
         // 내 차례가 아니면 누구를 기다리는지 적는다
         const who = this.actor();
@@ -768,6 +896,15 @@
       bar.classList.toggle('err', !!this.message && !wire);
       if (wire && this.myMove()) bar.querySelectorAll('button').forEach(b => { b.onclick = () => wire(b); });
       else if (wire) bar.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    }
+
+    /** 이번 턴에 남은 행위 안내 */
+    actionLeft() {
+      const g = this.game;
+      const mark = (used, name) => '<span class="chip' + (used ? ' off' : '') + '">' + (used ? '✓ ' : '') + name + '</span>';
+      const left = !g.summoned && !g.moved ? '기물을 눌러 이동하고, 오른쪽에서 소환할 기물도 고를 수 있습니다.'
+        : (g.summoned ? '기물을 눌러 이동하세요.' : '오른쪽에서 소환할 기물을 고르세요.');
+      return mark(g.summoned, '소환') + ' ' + mark(g.moved, '이동') + ' ' + left + ' 끝내려면 턴 넘기기.';
     }
 
     // ---- 패널 버튼 -------------------------------------------------------
